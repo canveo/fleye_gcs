@@ -40,11 +40,15 @@
   <!-- Use test_depend for packages you need only for testing: -->
   <!--   <test_depend>gtest</test_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>fleye_controller</build_depend>
   <build_depend>bebop_msgs</build_depend>
   <build_depend>tld_msgs</build_depend>
   <build_depend>roscpp</build_depend>
   <build_depend>rospy</build_depend>
   <build_depend>std_msgs</build_depend>
+
+  <run_depend>fleye_controller</run_depend>
   <run_depend>bebop_msgs</run_depend>
   <run_depend>tld_msgs</run_depend>
   <run_depend>roscpp</run_depend>
@@ -57,4 +61,5 @@
     <!-- Other tools can request additional information be placed here -->
 
   </export>
+
 </package>
