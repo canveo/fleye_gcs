@@ -104,9 +104,11 @@ class USER_INTENT_MANAGER(object):
     # given a camera_pose and user control, compute the goal pose in FRAME_ID_WORLD
     def set_intention_from_user_control(self, cam2world_4x4, user_right, user_down, user_forward, user_pan_right, user_tilt_down):
         # intended position offset
-        user_translation_camera_4x1 = np.array([[user_right, user_down, user_forward, 1]]).T
-        user_translation_world_4x1 = np.dot(cam2world_4x4, user_translation_camera_4x1)
-        self.__intended_position_offset = [user_translation_world_4x1[0,0], user_translation_world_4x1[1,0], user_translation_world_4x1[2,0]]
+        user_translation_camera_3x1 = np.array([[user_right, user_down, user_forward]]).T
+        user_translation_world_3x1 = np.dot(cam2world_4x4[:3,:3], user_translation_camera_3x1)
+
+        # user_translation_world_4x1 = np.dot(cam2world_4x4, user_translation_camera_4x1)
+        self.__intended_position_offset = [user_translation_world_3x1[0,0], user_translation_world_3x1[1,0], user_translation_world_3x1[2,0]]
         self.__intended_orientation = None
 
         # intended compositions

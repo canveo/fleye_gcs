@@ -50,8 +50,6 @@ class BEBOP_GCS(object):
     def __init__(self):
         rospy.init_node('fleye_gcs', anonymous=True)
 
-        rospy.Timer(rospy.Duration(1./GCS_LOOP_FREQUENCY), self.main_routine)
-
         rospy.Subscriber('fleye/gesture', Float32MultiArray, self.gesture_callback)
         self.pub_tl = rospy.Publisher('fleye/takeoff_land', String, queue_size=1)
         self.pub_orbit = rospy.Publisher('fleye/orbit', String, queue_size=1)
@@ -79,6 +77,8 @@ class BEBOP_GCS(object):
 
         # to estimate image translation velocity
         self.__last_cam2world = None
+
+        rospy.Timer(rospy.Duration(1./GCS_LOOP_FREQUENCY), self.main_routine)
 
     def main_routine(self, event):
         # check connect

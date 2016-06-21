@@ -54,6 +54,14 @@ class CONTROLLER(object):
         self.__pub_target_pan_world = rospy.Publisher('fleye/debug/target_pan_world', Float32, queue_size=1)
         self.__pub_current_pan_world = rospy.Publisher('fleye/debug/current_pan_world', Float32, queue_size=1)
 
+        self.__pub_target_x_world = rospy.Publisher('fleye/debug/target_x_world', Float32, queue_size=1)
+        self.__pub_target_y_world = rospy.Publisher('fleye/debug/target_y_world', Float32, queue_size=1)
+        self.__pub_target_z_world = rospy.Publisher('fleye/debug/target_z_world', Float32, queue_size=1)
+
+        self.__pub_current_x_world = rospy.Publisher('fleye/debug/current_x_world', Float32, queue_size=1)
+        self.__pub_current_y_world = rospy.Publisher('fleye/debug/current_y_world', Float32, queue_size=1)
+        self.__pub_current_z_world = rospy.Publisher('fleye/debug/current_z_world', Float32, queue_size=1)
+
         self.__pub_reflexxes_x = rospy.Publisher('fleye/debug/reflexxes_x', Float32, queue_size=1)
         self.__pub_reflexxes_y = rospy.Publisher('fleye/debug/reflexxes_y', Float32, queue_size=1)
         self.__pub_reflexxes_z = rospy.Publisher('fleye/debug/reflexxes_z', Float32, queue_size=1)
@@ -82,6 +90,7 @@ class CONTROLLER(object):
         self.__target_tilt_world = rotation_world[1]
 
     def compute_control(self):
+        self.__pub_current_state_and_target_state()
         self.__compute_orientation_control()
         self.__compute_position_control()
 
@@ -186,7 +195,8 @@ class CONTROLLER(object):
 
             # rotate control from world to drone, i.e., rotate around downward y-axis
             drone_yaw = self.__current_image_orientation[0] - self.__current_pan   # virtual camera offset
-            rotation_from_world_to_drone = transformations.rotation_matrix(drone_yaw, [0,1,0])[:3,:3]
+            # print "CONTROLLER: image_yaw", self.__current_image_orientation[0], "virtual camera pan", self.__current_pan, "drone_yaw", drone_yaw
+            rotation_from_world_to_drone = transformations.rotation_matrix(-drone_yaw, [0,1,0])[:3,:3]
             control_drone = np.dot(rotation_from_world_to_drone, control_world)
 
             self.__control_left = - control_drone[0,0] * GAIN_R_left
@@ -270,6 +280,15 @@ class CONTROLLER(object):
         request.t_vz = self.__target_image_translation_velocity[2]
 
         return request
+
+    def __pub_current_state_and_target_state(self):
+        self.__pub_current_x_world.publish(self.__current_image_position[0])
+        self.__pub_current_y_world.publish(self.__current_image_position[1])
+        self.__pub_current_z_world.publish(self.__current_image_position[2])
+
+        self.__pub_target_x_world.publish(self.__target_image_position[0])
+        self.__pub_target_y_world.publish(self.__target_image_position[1])
+        self.__pub_target_z_world.publish(self.__target_image_position[2])
 
     def __pub_reflexxes_response(self, response):
         self.__pub_reflexxes_x.publish(response.x)
