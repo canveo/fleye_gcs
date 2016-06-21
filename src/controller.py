@@ -24,14 +24,14 @@ class CONTROLLER(object):
         self.__current_image_translation_velocity = None    # format: vx, vy, vz
 
         self.__current_compositions = dict()    # format: dict { target_id: (u, v) }
-        self.__current_pan = None               # format: float in radians
-        self.__current_tilt = None              # format: float in radians
+        self.__current_pan = None               # format: in radians
+        self.__current_tilt = None              # format: in radians
 
         self.__target_image_position = None                 # format: x, y, z
         self.__target_image_translation_velocity = None     # format: vx, vy, vz
         self.__target_compositions = dict()                 # format: dict { target_id: (u, v) }, value = None is filtered out before passing in
-        self.__target_pan_world = None              # useful only when __target_compositions is empty in radians
-        self.__target_tilt_world = None             # useful only when __target_compositions is empty in radians
+        self.__target_pan_world = None              # useful only when __target_compositions is empty, in radians
+        self.__target_tilt_world = None             # useful only when __target_compositions is empty, in radians
 
         self.__control_forward = None
         self.__control_left = None
@@ -158,7 +158,7 @@ class CONTROLLER(object):
                     error_tilt = 0
                 reflexxes_response = self.__srv_reflexxes_control(self.__get_reflexxes_orientation_control_request(self.__current_pan + error_pan, self.__current_tilt + error_tilt))
 
-                control = np.array([[reflexxes_response.x, reflexxes_response.y, reflexxes_response.vz]]).T
+                # control = np.array([[reflexxes_response.x, reflexxes_response.y, reflexxes_response.vz]]).T
                 self.__control_pan_velocity = reflexxes_response.vx
                 self.__control_tilt_velocity = reflexxes_response.vy
                 self.__control_pan_acceleration = reflexxes_response.ax
@@ -259,21 +259,21 @@ class CONTROLLER(object):
         request.c_ay = 0
         request.c_az = 0
 
-        request.b_vx = 0.5
-        request.b_vy = 0.5
-        request.b_vz = 0.5
+        request.b_vx = 1
+        request.b_vy = 1
+        request.b_vz = 1
 
-        request.b_ax = 2
-        request.b_ay = 2
+        request.b_ax = 1
+        request.b_ay = 1
         request.b_az = 2
 
-        request.b_jx = 5
-        request.b_jy = 5
-        request.b_jz = 5
+        request.b_jx = 1
+        request.b_jy = 1
+        request.b_jz = 2
 
-        request.t_x = self.__target_image_position[0]
-        request.t_y = self.__target_image_position[1]
-        request.t_z = self.__target_image_position[2]
+        request.t_x = self.__target_image_position[0] if abs(self.__target_image_position[0] - self.__current_image_position[0]) > ERROR_TOLERANCE_Control_x else self.__current_image_position[0]
+        request.t_y = self.__target_image_position[1] if abs(self.__target_image_position[1] - self.__current_image_position[1]) > ERROR_TOLERANCE_Control_y else self.__current_image_position[1]
+        request.t_z = self.__target_image_position[2] if abs(self.__target_image_position[2] - self.__current_image_position[2]) > ERROR_TOLERANCE_Control_z else self.__current_image_position[2]
 
         request.t_vx = self.__target_image_translation_velocity[0]
         request.t_vy = self.__target_image_translation_velocity[1]

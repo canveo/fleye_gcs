@@ -13,7 +13,7 @@ from tf import transformations
 # We need to use resource locking to handle synchronization between GUI thread and ROS topic callbacks
 from threading import Lock
 
-import cmd_manager, imu_manager, angle, orb_slam_manager, user_intent_manager, target, controller
+import cmd_manager, imu_manager, angle, orb_slam_manager, user_intent_manager, target, controller, planner
 from target import Target
 
 from constant import *
@@ -68,6 +68,7 @@ class BEBOP_GCS(object):
         self.__user = user_intent_manager.USER_INTENT_MANAGER()
         self.__target_manager = target.TARGET_MANAGER()
         self.__controller = controller.CONTROLLER()
+        self.__planner = planner.PLANNER()
 
         self.__stage = STAGE.stage_idle
 
@@ -81,6 +82,9 @@ class BEBOP_GCS(object):
         rospy.Timer(rospy.Duration(1./GCS_LOOP_FREQUENCY), self.main_routine)
 
     def main_routine(self, event):
+        # pub debug info
+        self.__planner.pub_debug_info()
+
         # check connect
         if self.__orb.get_header() is None:
             self.reset_all()
@@ -111,25 +115,35 @@ class BEBOP_GCS(object):
         self.__target_manager.update_compositions_and_publish_targets_as_pcl(self.__orb.get_header(),
                                                                              self.__orb.get_world2cam_as_matrix(),
                                                                              self.__user.get_compositions())
-
         # force user to reset target composition behind camera
         for target_id in self.__user.get_composed_targets():
             if self.__target_manager.get_target_composition(target_id) is None:
                 self.__user.set_target_composition(target_id, None)
 
-        if self.__stage is STAGE.stage_idle:
-            # current state
+        # HERE planner and controller are doing their jobs
+        if self.__stage is STAGE.stage_init:
+            # block by taking off or landing
+            pass
+        elif self.__stage is STAGE.stage_idle:
+            # CONTROLLER: set current state
             tilt, pan = self.__imu.get_tilt_pan()
             self.__controller.set_current_state(self.__orb.get_cam2world(),
                                                 self.__estimate_image_translation_velocity(),
                                                 self.__target_manager.get_target_compositions(self.__user.get_composed_targets()),
                                                 pan, tilt)
-            # target state
-            target_image_position = [self.__orb.get_cam2world().translation.x + self.__user.get_intended_position_offset()[0],
-                                     self.__orb.get_cam2world().translation.y + self.__user.get_intended_position_offset()[1],
-                                     self.__orb.get_cam2world().translation.z + self.__user.get_intended_position_offset()[2]]
-            print "MAIN: intended_position", target_image_position
-            # print "MAIN: intended_orientation", self.__user.get_intended_orientation(self.__orb.get_cam2world().rotation)
+
+            # PLANNER: set hover position
+            if self.__planner.get_hover_position() is None or self.__user.get_intended_position_offset() is not None:
+                self.__planner.set_hover_position([self.__orb.get_cam2world().translation.x,
+                                                   self.__orb.get_cam2world().translation.y,
+                                                   self.__orb.get_cam2world().translation.z])
+
+            # CONTROLLER: set target state
+            target_image_position = self.__planner.get_hover_position()
+            if self.__user.get_intended_position_offset() is not None:
+                target_image_position = [self.__planner.get_hover_position()[0] + self.__user.get_intended_position_offset()[0],
+                                         self.__planner.get_hover_position()[1] + self.__user.get_intended_position_offset()[1],
+                                         self.__planner.get_hover_position()[2] + self.__user.get_intended_position_offset()[2]]
             self.__controller.set_target_state(target_image_position,
                                                [0,0,0],
                                                self.__user.get_composed_compositions(),
@@ -203,6 +217,9 @@ class BEBOP_GCS(object):
     # def reset_pan_tilt_callback(self, data):
     #     self.reset_pan_tilt()
 
+    def __change_stage_back_to_idle(self, event):
+        self.__stage = STAGE.stage_idle
+
     def gesture_callback(self, data):
         if len(data.data) is 1:
             # takeoff
@@ -212,6 +229,9 @@ class BEBOP_GCS(object):
                     self.__cmd.send_takeoff()
                     self.pub_tl.publish("land")
                     self.reset_all()
+                    self.__stage = STAGE.stage_init
+                    self.__planner.set_hover_position(None)
+                    rospy.Timer(rospy.Duration(CONSTANT_takeoff_land_time), self.__change_stage_back_to_idle, oneshot=True)
             # land
             elif int(data.data[0]) is ord('l'):
                 flight_state = self.__imu.get_flight_state()
@@ -219,6 +239,9 @@ class BEBOP_GCS(object):
                     self.__cmd.send_land()
                     self.pub_tl.publish("takeoff")
                     self.reset_all()
+                    self.__stage = STAGE.stage_init
+                    self.__planner.set_hover_position(None)
+                    rospy.Timer(rospy.Duration(CONSTANT_takeoff_land_time), self.__change_stage_back_to_idle, oneshot=True)
 
             # # cancel all targets
             # elif int(data.data[0]) is ord('N'):

@@ -18,7 +18,7 @@ from threading import *
 class USER_INTENT_MANAGER(object):
     def __init__(self):
         # user intended position offset expressed by user control
-        self.__intended_position_offset = [0,0,0]  # format: [delta_x, delta_y, delta_z]
+        self.__intended_position_offset = None#[0,0,0]  # format: [delta_x, delta_y, delta_z]
 
         # only if there is no composed targets, __intended_orientation_offset and __intended_orientation are used
         self.__intended_orientation_offset = [0,0]  # format: [delta_pan_right, delta_tilt_down] in degree
@@ -131,7 +131,7 @@ class USER_INTENT_MANAGER(object):
             self.__intended_orientation_offset = [user_pan_right * GAIN_User_pan_radian_per_unit, user_tilt_down * GAIN_User_tilt_radian_per_unit]
 
     def reset_intention(self, rotation_world):
-        self.__intended_position_offset = [0,0,0]
+        self.__intended_position_offset = None#[0,0,0]
         self.__intended_orientation_offset = [0,0]
         self.__intended_orientation = transformations.euler_from_quaternion([rotation_world.x, rotation_world.y, rotation_world.z, rotation_world.w], axes='ryxz')
 

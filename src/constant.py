@@ -63,9 +63,15 @@ ERROR_TOLERANCE_Control_pan = 5 * math.pi / 180.    # radian
 ERROR_TOLERANCE_Control_tilt = 5 * math.pi / 180.   # radian
 ERROR_TOLERANCE_Control_yaw = 5. * math.pi / 180.   # radian
 
+ERROR_TOLERANCE_Control_x = 0.05    # unit in orb
+ERROR_TOLERANCE_Control_y = 0.05    # unit in orb
+ERROR_TOLERANCE_Control_z = 0.05    # unit in orb
+
 # control gain for reflexxes
 GAIN_R_left = 1
 GAIN_R_forward = 1
 GAIN_R_up = 1
 
 GCS_LOOP_FREQUENCY = 30.
+
+CONSTANT_takeoff_land_time = 3  # secs
