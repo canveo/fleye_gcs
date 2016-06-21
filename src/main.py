@@ -133,11 +133,16 @@ class BEBOP_GCS(object):
                                                 pan, tilt)
 
             # PLANNER: set hover position
-            if self.__planner.get_hover_position() is None or self.__user.get_intended_position_offset() is not None:
+            if self.__planner.get_hover_position() is None:
                 self.__planner.set_hover_position([self.__orb.get_cam2world().translation.x,
                                                    self.__orb.get_cam2world().translation.y,
                                                    self.__orb.get_cam2world().translation.z])
 
+            elif self.__user.get_intended_position_offset() is not None:
+                self.__planner.update_hover_position([self.__orb.get_cam2world().translation.x,
+                                                      self.__orb.get_cam2world().translation.y,
+                                                      self.__orb.get_cam2world().translation.z],
+                                                     self.__user.get_intended_position_offset())
             # CONTROLLER: set target state
             target_image_position = self.__planner.get_hover_position()
             if self.__user.get_intended_position_offset() is not None:

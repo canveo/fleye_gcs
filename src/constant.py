@@ -61,7 +61,7 @@ ERROR_TOLERANCE_Composition_tilt = 5  # px
 
 ERROR_TOLERANCE_Control_pan = 5 * math.pi / 180.    # radian
 ERROR_TOLERANCE_Control_tilt = 5 * math.pi / 180.   # radian
-ERROR_TOLERANCE_Control_yaw = 5. * math.pi / 180.   # radian
+ERROR_TOLERANCE_Control_yaw = 15. * math.pi / 180.   # radian
 
 ERROR_TOLERANCE_Control_x = 0.05    # unit in orb
 ERROR_TOLERANCE_Control_y = 0.05    # unit in orb

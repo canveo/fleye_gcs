@@ -16,6 +16,7 @@ from threading import Lock
 from target import Target
 
 from constant import *
+from vector import *
 
 class PLANNER(object):
     def __init__(self):
@@ -32,10 +33,13 @@ class PLANNER(object):
     def get_hover_position(self):
         return self.__hover_position
 
-    # def update_hover_position(self, position_offset):
-    #     self.__hover_position[0] += position_offset[0]
-    #     self.__hover_position[1] += position_offset[1]
-    #     self.__hover_position[2] += position_offset[2]
+    def update_hover_position(self, position, offset_direction):
+        hover_position_offset_1x3 = project_from_to(np.array([position[0] - self.__hover_position[0], position[1] - self.__hover_position[1], position[2] - self.__hover_position[2]]),
+                                                    np.array([offset_direction[0], offset_direction[1], offset_direction[2]]))
+
+        self.__hover_position[0] += 0 if math.isnan(hover_position_offset_1x3[0]) else hover_position_offset_1x3[0]
+        self.__hover_position[1] += 0 if math.isnan(hover_position_offset_1x3[1]) else hover_position_offset_1x3[1]
+        self.__hover_position[2] += 0 if math.isnan(hover_position_offset_1x3[2]) else hover_position_offset_1x3[2]
 
     def pub_debug_info(self):
         if self.__hover_position is not None:
