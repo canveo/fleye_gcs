@@ -62,6 +62,10 @@ class CONTROLLER(object):
         self.__pub_current_y_world = rospy.Publisher('fleye/debug/current_y_world', Float32, queue_size=1)
         self.__pub_current_z_world = rospy.Publisher('fleye/debug/current_z_world', Float32, queue_size=1)
 
+        self.__pub_current_vx_world = rospy.Publisher('fleye/debug/current_vx_world', Float32, queue_size=1)
+        self.__pub_current_vy_world = rospy.Publisher('fleye/debug/current_vy_world', Float32, queue_size=1)
+        self.__pub_current_vz_world = rospy.Publisher('fleye/debug/current_vz_world', Float32, queue_size=1)
+
         self.__pub_reflexxes_x = rospy.Publisher('fleye/debug/reflexxes_x', Float32, queue_size=1)
         self.__pub_reflexxes_y = rospy.Publisher('fleye/debug/reflexxes_y', Float32, queue_size=1)
         self.__pub_reflexxes_z = rospy.Publisher('fleye/debug/reflexxes_z', Float32, queue_size=1)
@@ -73,9 +77,9 @@ class CONTROLLER(object):
         self.__pub_reflexxes_az = rospy.Publisher('fleye/debug/reflexxes_az', Float32, queue_size=1)
 
 
-    def set_current_state(self, image_pose, image_translation_velocity, compositions, pan, tilt):
-        self.__current_image_position = [image_pose.translation.x, image_pose.translation.y, image_pose.translation.z]
-        self.__current_image_orientation = transformations.euler_from_quaternion([image_pose.rotation.x, image_pose.rotation.y, image_pose.rotation.z, image_pose.rotation.w], axes='ryxz') # pan->tilt->roll
+    def set_current_state(self, image_position, image_orientation, image_translation_velocity, compositions, pan, tilt):
+        self.__current_image_position = image_position
+        self.__current_image_orientation = image_orientation # pan->tilt->roll
         self.__current_image_translation_velocity = image_translation_velocity
 
         self.__current_compositions = compositions
@@ -259,17 +263,17 @@ class CONTROLLER(object):
         request.c_ay = 0
         request.c_az = 0
 
-        request.b_vx = 1
-        request.b_vy = 1
-        request.b_vz = 1
+        request.b_vx = 3
+        request.b_vy = 3
+        request.b_vz = 3
 
-        request.b_ax = 1
-        request.b_ay = 1
-        request.b_az = 2
+        request.b_ax = 9999
+        request.b_ay = 9999
+        request.b_az = 9999
 
-        request.b_jx = 1
-        request.b_jy = 1
-        request.b_jz = 2
+        request.b_jx = 9999
+        request.b_jy = 9999
+        request.b_jz = 9999
 
         request.t_x = self.__target_image_position[0] if abs(self.__target_image_position[0] - self.__current_image_position[0]) > ERROR_TOLERANCE_Control_x else self.__current_image_position[0]
         request.t_y = self.__target_image_position[1] if abs(self.__target_image_position[1] - self.__current_image_position[1]) > ERROR_TOLERANCE_Control_y else self.__current_image_position[1]
@@ -289,6 +293,11 @@ class CONTROLLER(object):
         self.__pub_target_x_world.publish(self.__target_image_position[0])
         self.__pub_target_y_world.publish(self.__target_image_position[1])
         self.__pub_target_z_world.publish(self.__target_image_position[2])
+
+        self.__pub_current_vx_world.publish(self.__current_image_translation_velocity[0])
+        self.__pub_current_vy_world.publish(self.__current_image_translation_velocity[1])
+        self.__pub_current_vz_world.publish(self.__current_image_translation_velocity[2])
+
 
     def __pub_reflexxes_response(self, response):
         self.__pub_reflexxes_x.publish(response.x)

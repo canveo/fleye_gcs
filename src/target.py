@@ -103,7 +103,7 @@ class TARGET_MANAGER(object):
 
     # input: a list of target id
     # output: PointCloud message
-    def update_compositions_and_publish_targets_as_pcl(self, header, world2cam_4x4, compositions):#composed_targets, none_composed_targets):
+    def update_compositions_and_publish_targets_as_pcl(self, header, world2cam_4x4, compositions):#compositions include both composed_targets and none_composed_targets
 
         self.__update_compositions(world2cam_4x4)
 

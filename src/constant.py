@@ -63,15 +63,24 @@ ERROR_TOLERANCE_Control_pan = 5 * math.pi / 180.    # radian
 ERROR_TOLERANCE_Control_tilt = 5 * math.pi / 180.   # radian
 ERROR_TOLERANCE_Control_yaw = 15. * math.pi / 180.   # radian
 
-ERROR_TOLERANCE_Control_x = 0.05    # unit in orb
-ERROR_TOLERANCE_Control_y = 0.05    # unit in orb
-ERROR_TOLERANCE_Control_z = 0.05    # unit in orb
+ERROR_TOLERANCE_Control_x = 0.2    # unit in orb
+ERROR_TOLERANCE_Control_y = 0.2    # unit in orb
+ERROR_TOLERANCE_Control_z = 0.2    # unit in orb
 
 # control gain for reflexxes
-GAIN_R_left = 1
-GAIN_R_forward = 1
-GAIN_R_up = 1
+GAIN_R_left = 1./20.
+GAIN_R_forward = 1./20.
+GAIN_R_up = 1./20.
 
 GCS_LOOP_FREQUENCY = 30.
+ORB_SLAM_FREQUENCY = 29.
+
+ORB_R_std = 0.0015
+ORB_Q_std = 0.1
 
 CONSTANT_takeoff_land_time = 3  # secs
+
+ERROR_TOLERANCE_distance_ratio_to_target = 0.2
+ERROR_TOLERANCE_angle_difference_wrt_target = 7. * math.pi / 180. # radian
+ERROR_TOLERANCE_Composition_pan_factor = 2
+ERROR_TOLERANCE_Composition_tilt_factor = 2

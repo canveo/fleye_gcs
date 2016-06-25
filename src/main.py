@@ -4,7 +4,7 @@ import roslib
 
 import rospy
 
-from std_msgs.msg import Header, Empty, Float32, Float32MultiArray, String, Int32
+from std_msgs.msg import Header, Empty, Float32, Float32MultiArray, String, Int32, Bool
 from sensor_msgs.msg import Image, CompressedImage, ChannelFloat32, PointCloud
 from geometry_msgs.msg import Pose, PoseStamped                                     #http://docs.ros.org/api/geometry_msgs/html/index-msg.html
 
@@ -17,6 +17,8 @@ import cmd_manager, imu_manager, angle, orb_slam_manager, user_intent_manager, t
 from target import Target
 
 from constant import *
+
+import Queue
 
 # from pid_controller import *
 # from hover import *
@@ -61,29 +63,42 @@ class BEBOP_GCS(object):
         self.__pub_snap_shot = rospy.Publisher('fleye/snap_shot', CompressedImage, queue_size=1)
         self.__pub_snap_shot_info = rospy.Publisher('fleye/snap_shot_info', Float32MultiArray, queue_size=1)
 
+        # modules
         self.__cmd = cmd_manager.CMD_MANAGER()
         self.__imu = imu_manager.IMU_MANAGER()
-        # self.tld = tld_module.TLD_MODULE()
         self.__orb = orb_slam_manager.ORB_SLAM_MANAGER()
         self.__user = user_intent_manager.USER_INTENT_MANAGER()
         self.__target_manager = target.TARGET_MANAGER()
         self.__controller = controller.CONTROLLER()
         self.__planner = planner.PLANNER()
+        # self.tld = tld_module.TLD_MODULE()
 
+        # stage
         self.__stage = STAGE.stage_idle
 
         # to check connection lost
         self.__last_header = None
         self.__is_last_header_new = False
 
-        # to estimate image translation velocity
-        self.__last_cam2world = None
+        # debug
+        rospy.Subscriber('fleye/debug/keyboard_overtake', Bool, self.overtake_callback)
+        self.__is_overtaken = False
 
+        # MAIN LOOP
         rospy.Timer(rospy.Duration(1./GCS_LOOP_FREQUENCY), self.main_routine)
+
+    def overtake_callback(self, data):
+        self.__is_overtaken = data.data
 
     def main_routine(self, event):
         # pub debug info
+        self.__orb.pub_debug_info()
         self.__planner.pub_debug_info()
+
+        if self.__is_overtaken:
+            print "MAIN: keyboard control", rospy.Time.now().to_time()
+            return
+
 
         # check connect
         if self.__orb.get_header() is None:
@@ -91,6 +106,7 @@ class BEBOP_GCS(object):
             self.__cmd.send_bebop_hover()
             return
         elif self.__last_header is None:
+            self.reset_all()
             self.__last_header = self.__orb.get_header()
             self.__is_last_header_new = True
         else:
@@ -127,21 +143,18 @@ class BEBOP_GCS(object):
         elif self.__stage is STAGE.stage_idle:
             # CONTROLLER: set current state
             tilt, pan = self.__imu.get_tilt_pan()
-            self.__controller.set_current_state(self.__orb.get_cam2world(),
-                                                self.__estimate_image_translation_velocity(),
+            self.__controller.set_current_state(self.__orb.get_position(),
+                                                self.__orb.get_orientation(),
+                                                self.__orb.get_velocity(),
                                                 self.__target_manager.get_target_compositions(self.__user.get_composed_targets()),
                                                 pan, tilt)
 
             # PLANNER: set hover position
             if self.__planner.get_hover_position() is None:
-                self.__planner.set_hover_position([self.__orb.get_cam2world().translation.x,
-                                                   self.__orb.get_cam2world().translation.y,
-                                                   self.__orb.get_cam2world().translation.z])
+                self.__planner.set_hover_position(self.__orb.get_position())
 
             elif self.__user.get_intended_position_offset() is not None:
-                self.__planner.update_hover_position([self.__orb.get_cam2world().translation.x,
-                                                      self.__orb.get_cam2world().translation.y,
-                                                      self.__orb.get_cam2world().translation.z],
+                self.__planner.update_hover_position(self.__orb.get_position(),
                                                      self.__user.get_intended_position_offset())
             # CONTROLLER: set target state
             target_image_position = self.__planner.get_hover_position()
@@ -152,7 +165,7 @@ class BEBOP_GCS(object):
             self.__controller.set_target_state(target_image_position,
                                                [0,0,0],
                                                self.__user.get_composed_compositions(),
-                                               self.__user.get_intended_orientation(self.__orb.get_cam2world().rotation))
+                                               self.__user.get_intended_orientation(self.__orb.get_orientation()))
 
             # compute
             self.__controller.compute_control()
@@ -162,17 +175,41 @@ class BEBOP_GCS(object):
             pan, tilt = self.__cmd.set_tilt_pan(self.__controller.get_control_goal_tilt(), self.__controller.get_control_goal_pan())
             self.__imu.set_tilt_pan(tilt, pan)
 
-        # update to estimate image translation velocity
-        self.__last_cam2world = self.__orb.get_cam2world()
+        # TODO: enable shared control during autopilot
+        elif self.__stage is STAGE.stage_zigzag:
 
+            # CONTROLLER: set current state
+            tilt, pan = self.__imu.get_tilt_pan()
+            self.__controller.set_current_state(self.__orb.get_position(),
+                                                self.__orb.get_orientation(),
+                                                self.__orb.get_velocity(),
+                                                self.__target_manager.get_target_compositions(self.__user.get_composed_targets()),
+                                                pan, tilt)
 
-    def __estimate_image_translation_velocity(self):
-        if self.__last_cam2world is None:
-            return [0,0,0]
-        else:
-            return [self.__orb.get_cam2world().translation.x - self.__last_cam2world.translation.x,
-                    self.__orb.get_cam2world().translation.y - self.__last_cam2world.translation.y,
-                    self.__orb.get_cam2world().translation.z - self.__last_cam2world.translation.z]
+            # PLANNER: check zigzag stage
+            if self.__planner.is_zigzag_current_waypoint_reached(self.__orb.get_position(),
+                                                                 self.__user.get_compositions()[self.__planner.get_target().get_id()],
+                                                                 self.__target_manager.get_target_composition(self.__planner.get_target().get_id())):
+                self.__planner.update_zigzag_waypoint()
+            if self.__planner.is_zigzag_done():
+                self.__planner.reset_zigzag()
+                self.__stage = STAGE.stage_idle
+                print "MAIN: zigzag done"
+                return
+
+            # CONTROLLER: set target state
+            self.__controller.set_target_state(self.__planner.get_current_zigzag_waypoint(),
+                                               [0,0,0],
+                                               self.__user.get_composed_compositions(),
+                                               [None, None])
+
+            # compute
+            self.__controller.compute_control()
+
+            # control
+            self.__cmd.send_cmd_vel(self.__controller.get_control_forward(), self.__controller.get_control_left(), self.__controller.get_control_up(), self.__controller.get_control_turn_left())
+            pan, tilt = self.__cmd.set_tilt_pan(self.__controller.get_control_goal_tilt(), self.__controller.get_control_goal_pan())
+            self.__imu.set_tilt_pan(tilt, pan)
 
     def image_compressed_callback(self, data):
         self.__image_compressed_buffer_lock.acquire()
@@ -288,13 +325,23 @@ class BEBOP_GCS(object):
 
             # finger up
             elif int(data.data[0]) is ord('Q'):
-                self.__user.reset_intention(self.__orb.get_cam2world().rotation)
+                self.__user.reset_intention(self.__orb.get_orientation())
 
             # orbiting
-            elif int(data.data[0]) is ord('U'):
-                self.__stage = STAGE.stage_circle
+            elif int(data.data[0]) is ord('o'):
+                # TODO: fake orbit with zigzag
+                if len(self.__user.get_composed_targets()) is not 1:
+                    print "MAIN: falied to start orbit, because number of targets is", len(self.__user.get_composed_targets())
+                    return
+
+                target_id = self.__user.get_composed_targets()[0]
+                self.__planner.plan_zigzag(self.__target_manager.get_target(target_id))
+
+                self.__stage = STAGE.stage_zigzag
                 self.pub_orbit.publish("")
                 print "MAIN: start orbiting"
+
+            # zigzag
 
         elif len(data.data) is 2:
             # confirm target with id

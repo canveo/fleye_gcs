@@ -21,7 +21,6 @@ def rad_from_to(f, t):
         rad += 2 * math.pi
     return rad
 
-
 def degree_from_to(f, t):
     degree = t - f
     while degree > 180:

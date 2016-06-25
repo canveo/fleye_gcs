@@ -130,18 +130,17 @@ class USER_INTENT_MANAGER(object):
             # when there is no composed targets, __intended_orientation_offset is used
             self.__intended_orientation_offset = [user_pan_right * GAIN_User_pan_radian_per_unit, user_tilt_down * GAIN_User_tilt_radian_per_unit]
 
-    def reset_intention(self, rotation_world):
+    def reset_intention(self, orientation_world):
         self.__intended_position_offset = None#[0,0,0]
         self.__intended_orientation_offset = [0,0]
-        self.__intended_orientation = transformations.euler_from_quaternion([rotation_world.x, rotation_world.y, rotation_world.z, rotation_world.w], axes='ryxz')
+        self.__intended_orientation = orientation_world
 
     def get_intended_position_offset(self):
         return self.__intended_position_offset
 
-    def get_intended_orientation(self, rotation_world):
+    def get_intended_orientation(self, orientation_world):
         if self.__intended_orientation is None:
-            rotation_world_euler = transformations.euler_from_quaternion([rotation_world.x, rotation_world.y, rotation_world.z, rotation_world.w], 'ryxz')
-            return [rotation_world_euler[0] - self.__intended_orientation_offset[0],   # pan right -> turn left -> decrease pan angle
-                    rotation_world_euler[1] + self.__intended_orientation_offset[1],   # tilt down -> turn up -> increase tilt angle
-                    rotation_world_euler[2]]
+            return [orientation_world[0] - self.__intended_orientation_offset[0],   # pan right -> turn left -> decrease pan angle
+                    orientation_world[1] + self.__intended_orientation_offset[1],   # tilt down -> turn up -> increase tilt angle
+                    orientation_world[2]]
         return self.__intended_orientation
