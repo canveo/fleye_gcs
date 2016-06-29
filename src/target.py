@@ -152,18 +152,6 @@ class TARGET_MANAGER(object):
                     channel_tu.values.append(self.__compositions[target_id][0])
                     channel_tv.values.append(self.__compositions[target_id][1])
 
-
-        # for target_id in none_composed_targets:
-        #     if self.__compositions[target_id] is not None:
-        #         targetsMsg.points.append(self.__targets[target_id].get_center_as_point32())
-        #         channel_radius.values.append(self.__targets[target_id].get_radius())
-        #         channel_id.values.append(target_id)
-        #         channel_u.values.append(self.__compositions[target_id][0])
-        #         channel_v.values.append(self.__compositions[target_id][1])
-        #         channel_w.values.append(self.__compositions[target_id][2])
-        #         channel_h.values.append(self.__compositions[target_id][3])
-        #         channel_c.values.append(-1.0)
-
         targetsMsg.channels.append(channel_radius)
         targetsMsg.channels.append(channel_id)
         targetsMsg.channels.append(channel_u)

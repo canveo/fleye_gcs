@@ -6,7 +6,7 @@ import rospy
 
 from std_msgs.msg import Header, Empty, Float32, Float32MultiArray, String, Int32, Header
 from sensor_msgs.msg import Image, CompressedImage, ChannelFloat32, PointCloud
-from geometry_msgs.msg import Point, Point32, PointStamped, PoseStamped                                     #http://docs.ros.org/api/geometry_msgs/html/index-msg.html
+from geometry_msgs.msg import Point, Quaternion, Point32, PointStamped, PoseStamped                                     #http://docs.ros.org/api/geometry_msgs/html/index-msg.html
 
 from tf import transformations
 
@@ -24,6 +24,11 @@ class PLANNER(object):
         # hover
         self.__hover_position = None    # format: [x_world, y_world, z_world]
 
+        # restore
+        self.__restore_position = None  # format: [x_world, y_world, z_world]
+        self.__restore_orientation = None   #format: [pan_world, tilt_world, roll_world]
+        self.__restore_compositions = None   #format: { target_id : (u,v) }
+
         # common for zigzag and circle
         self.__target = None            # format: Target
         self.__start_position = None    # format: [x_world, y_world, z_world]
@@ -38,6 +43,7 @@ class PLANNER(object):
 
 
         self.__pub_hover_position = rospy.Publisher('fleye/debug/planner_hover_position', PointStamped, queue_size=1)
+        self.__pub_restore_pose = rospy.Publisher('fleye/debug/planner_restore_pose', PoseStamped, queue_size=1)
         self.__pub_waypoints = rospy.Publisher('fleye/debug/planner_waypoints', PointCloud, queue_size=1)
 
     # --------------------------------------------- HOVER
@@ -54,6 +60,45 @@ class PLANNER(object):
         self.__hover_position[0] += 0 if math.isnan(hover_position_offset_1x3[0]) else hover_position_offset_1x3[0]
         self.__hover_position[1] += 0 if math.isnan(hover_position_offset_1x3[1]) else hover_position_offset_1x3[1]
         self.__hover_position[2] += 0 if math.isnan(hover_position_offset_1x3[2]) else hover_position_offset_1x3[2]
+
+
+    # --------------------------------------------- RESTORE
+    def plan_restore(self, position, orientation, compositions):
+        self.__restore_position = position
+        self.__restore_orientation = orientation
+        self.__restore_compositions = compositions
+
+    def is_restore_done(self, position, orientation, current_compositions):
+        # check distance
+        if distance_between(np.array(position), np.array(self.__restore_position)) > ERROR_TOLERANCE_Control_x:
+            return False
+
+        if len(self.__restore_compositions) is 0:
+            if rad_from_to(orientation[0], self.__restore_orientation[0]) > ERROR_TOLERANCE_Control_pan * ERROR_TOLERANCE_Composition_pan_factor \
+                or rad_from_to(orientation[1], self.__restore_orientation[1]) > ERROR_TOLERANCE_Control_tilt * ERROR_TOLERANCE_Composition_tilt_factor:
+                return False
+        else:
+            for target_id in self.__restore_compositions.keys():
+                if current_compositions[target_id] is None:
+                    return False
+                if not self.__is_target_well_composed(self.__restore_compositions[target_id], current_compositions[target_id]):
+                    return False
+        return True
+
+    def reset_restore(self):
+        self.__hover_position = self.__restore_position
+        self.__restore_position = None
+        self.__restore_orientation = None
+        self.__restore_compositions = None
+
+    def get_restore_position(self):
+        return self.__restore_position
+
+    def get_restore_orientation(self):
+        return self.__restore_orientation
+
+    def get_restore_compositions(self):
+        return self.__restore_compositions
 
     # --------------------------------------------- ZIGZAG
     def plan_zigzag(self, target, number_of_rows=3, number_of_shots_each_side = 2, angle_interval = 20. * math.pi / 180.):  #TODO: number_of_rows
@@ -72,8 +117,9 @@ class PLANNER(object):
         return self.__waypoint_count >= len(self.__waypoints)
 
     def reset_zigzag(self):
+        self.__hover_position = self.__start_position
         self.__target = None
-        self.__start_position = self.__start_position
+        self.__start_position = None
         self.__distance_to_target = None
         self.__waypoints = []
         self.__waypoint_count = None
@@ -113,6 +159,8 @@ class PLANNER(object):
 
         return True
 
+
+
     # common for all
     def get_target(self):
         return self.__target
@@ -133,6 +181,16 @@ class PLANNER(object):
             hoverPositionMsg.point = Point(self.__hover_position[0], self.__hover_position[1], self.__hover_position[2])
 
             self.__pub_hover_position.publish(hoverPositionMsg)
+
+        if self.__restore_position is not None:
+            restorePoseMsg = PoseStamped()
+            restorePoseMsg.header = Header()
+            restorePoseMsg.header.frame_id = FRAME_ID_WORLD
+            restorePoseMsg.pose.position = Point(self.__restore_position[0], self.__restore_position[1], self.__restore_position[2])
+            q = transformations.quaternion_from_euler(self.__restore_orientation[0], self.__restore_orientation[1], self.__restore_orientation[2], axes='ryxz')
+            restorePoseMsg.pose.orientation = Quaternion(q[0], q[1], q[2], q[3])
+
+            self.__pub_restore_pose.publish(restorePoseMsg)
 
         waypointsMsg = PointCloud()
         waypointsMsg.header = Header()

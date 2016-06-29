@@ -54,10 +54,13 @@ class BEBOP_GCS(object):
 
         rospy.Subscriber('fleye/gesture', Float32MultiArray, self.gesture_callback)
         self.pub_tl = rospy.Publisher('fleye/takeoff_land', String, queue_size=1)
+        self.pub_pano = rospy.Publisher('fleye/pano', String, queue_size=1)
         self.pub_orbit = rospy.Publisher('fleye/orbit', String, queue_size=1)
+        self.pub_zigzag = rospy.Publisher('fleye/zigzag', String, queue_size=1)
 
         # take shot
         rospy.Subscriber('/bebop/image_raw/compressed', CompressedImage, self.image_compressed_callback, queue_size=1)
+        self.__pub_snap_shot_on_board = rospy.Publisher('bebop/snapshot', Empty, queue_size=1)
         self.__image_compressed_buffer = None
         self.__image_compressed_buffer_lock = Lock()
         self.__pub_snap_shot = rospy.Publisher('fleye/snap_shot', CompressedImage, queue_size=1)
@@ -90,15 +93,44 @@ class BEBOP_GCS(object):
     def overtake_callback(self, data):
         self.__is_overtaken = data.data
 
+    def pub_interface_look(self):
+        if self.__stage is STAGE.stage_idle:
+            self.pub_pano.publish("white")
+            self.pub_orbit.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
+            self.pub_zigzag.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
+        elif self.__stage is STAGE.stage_pano:
+            self.pub_pano.publish("yellow")
+            self.pub_orbit.publish("grey")
+            self.pub_zigzag.publish("grey")
+        elif self.__stage is STAGE.stage_circle:
+            self.pub_pano.publish("grey")
+            self.pub_orbit.publish("yellow")
+            self.pub_zigzag.publish("grey")
+        elif self.__stage is STAGE.stage_zigzag:
+            self.pub_pano.publish("grey")
+            self.pub_orbit.publish("grey")
+            self.pub_zigzag.publish("yellow")
+        elif self.__stage is STAGE.stage_restore:
+            self.pub_pano.publish("grey")
+            self.pub_orbit.publish("grey")
+            self.pub_zigzag.publish("grey")
+        else:
+            self.pub_pano.publish("grey")
+            self.pub_orbit.publish("grey")
+            self.pub_zigzag.publish("grey")
+
     def main_routine(self, event):
+        # pub interface look
+        self.pub_interface_look()
+
         # pub debug info
         self.__orb.pub_debug_info()
         self.__planner.pub_debug_info()
+        self.__controller.pub_debug_info()
 
         if self.__is_overtaken:
             print "MAIN: keyboard control", rospy.Time.now().to_time()
             return
-
 
         # check connect
         if self.__orb.get_header() is None:
@@ -175,9 +207,40 @@ class BEBOP_GCS(object):
             pan, tilt = self.__cmd.set_tilt_pan(self.__controller.get_control_goal_tilt(), self.__controller.get_control_goal_pan())
             self.__imu.set_tilt_pan(tilt, pan)
 
-        # TODO: enable shared control during autopilot
-        elif self.__stage is STAGE.stage_zigzag:
+        elif self.__stage is STAGE.stage_restore:
+            # CONTROLLER: set current state
+            tilt, pan = self.__imu.get_tilt_pan()
+            self.__controller.set_current_state(self.__orb.get_position(),
+                                                self.__orb.get_orientation(),
+                                                self.__orb.get_velocity(),
+                                                self.__target_manager.get_target_compositions(self.__user.get_composed_targets()),
+                                                pan, tilt)
 
+            # PLANNER: check restore stage
+            if self.__planner.is_restore_done(self.__orb.get_position(),
+                                              self.__orb.get_orientation(),
+                                              self.__target_manager.get_target_compositions(self.__planner.get_restore_compositions().keys())):
+                self.__planner.reset_restore()
+                self.__stage = STAGE.stage_idle
+                print "MAIN: restore done"
+                return
+
+            # CONTROLLER: set target state
+            self.__controller.set_target_state(self.__planner.get_restore_position(),
+                                               [0,0,0],
+                                               self.__planner.get_restore_compositions(),
+                                               self.__planner.get_restore_orientation())
+
+            # compute
+            self.__controller.compute_control()
+
+            # control
+            self.__cmd.send_cmd_vel(self.__controller.get_control_forward(), self.__controller.get_control_left(), self.__controller.get_control_up(), self.__controller.get_control_turn_left())
+            pan, tilt = self.__cmd.set_tilt_pan(self.__controller.get_control_goal_tilt(), self.__controller.get_control_goal_pan())
+            self.__imu.set_tilt_pan(tilt, pan)
+
+        # TODO: enable shared control during autopilot
+        elif self.__stage is STAGE.stage_circle:
             # CONTROLLER: set current state
             tilt, pan = self.__imu.get_tilt_pan()
             self.__controller.set_current_state(self.__orb.get_position(),
@@ -190,6 +253,7 @@ class BEBOP_GCS(object):
             if self.__planner.is_zigzag_current_waypoint_reached(self.__orb.get_position(),
                                                                  self.__user.get_compositions()[self.__planner.get_target().get_id()],
                                                                  self.__target_manager.get_target_composition(self.__planner.get_target().get_id())):
+                self.shoot()
                 self.__planner.update_zigzag_waypoint()
             if self.__planner.is_zigzag_done():
                 self.__planner.reset_zigzag()
@@ -262,6 +326,40 @@ class BEBOP_GCS(object):
     def __change_stage_back_to_idle(self, event):
         self.__stage = STAGE.stage_idle
 
+    def shoot(self):
+        self.__pub_snap_shot_on_board.publish(Empty())
+
+        self.__image_compressed_buffer_lock.acquire()
+        self.__pub_snap_shot.publish(self.__image_compressed_buffer)
+        self.__image_compressed_buffer_lock.release()
+
+        pose_composition_msg = Float32MultiArray()
+
+        # pose
+        cam2world = self.__orb.get_cam2world()
+        pose_composition_msg.data.append(cam2world.translation.x)
+        pose_composition_msg.data.append(cam2world.translation.y)
+        pose_composition_msg.data.append(cam2world.translation.z)
+        pose_composition_msg.data.append(cam2world.rotation.x)
+        pose_composition_msg.data.append(cam2world.rotation.y)
+        pose_composition_msg.data.append(cam2world.rotation.z)
+        pose_composition_msg.data.append(cam2world.rotation.w)
+
+        # composition
+        targets_of_interest = self.__user.get_composed_targets()  # not none composition
+        compositions_of_interest = self.__target_manager.get_target_compositions(targets_of_interest)
+
+        for target_id in compositions_of_interest.keys():
+            if compositions_of_interest[target_id] is not None and \
+                                    0 < compositions_of_interest[target_id][0] < IMAGE_WIDTH and \
+                                    0 < compositions_of_interest[target_id][1] < IMAGE_HEIGHT:
+                pose_composition_msg.data.append(target_id)
+                pose_composition_msg.data.append(compositions_of_interest[target_id][0])
+                pose_composition_msg.data.append(compositions_of_interest[target_id][1])
+
+        self.__pub_snap_shot_info.publish(pose_composition_msg)
+        print "MAIN: shoot"
+
     def gesture_callback(self, data):
         if len(data.data) is 1:
             # takeoff
@@ -292,54 +390,26 @@ class BEBOP_GCS(object):
 
             # shoot
             elif int(data.data[0]) is ord('s'):
-                self.__image_compressed_buffer_lock.acquire()
-                self.__pub_snap_shot.publish(self.__image_compressed_buffer)
-                self.__image_compressed_buffer_lock.release()
-
-                pose_composition_msg = Float32MultiArray()
-
-                # pose
-                cam2world = self.__orb.get_cam2world()
-                pose_composition_msg.data.append(cam2world.translation.x)
-                pose_composition_msg.data.append(cam2world.translation.y)
-                pose_composition_msg.data.append(cam2world.translation.z)
-                pose_composition_msg.data.append(cam2world.rotation.x)
-                pose_composition_msg.data.append(cam2world.rotation.y)
-                pose_composition_msg.data.append(cam2world.rotation.z)
-                pose_composition_msg.data.append(cam2world.rotation.w)
-
-                # composition
-                targets_of_interest = self.__user.get_composed_targets() #not none composition
-                compositions_of_interest = self.__target_manager.get_target_compositions(targets_of_interest)
-
-                for target_id in compositions_of_interest.keys():
-                    if compositions_of_interest[target_id] is not None and \
-                        0 < compositions_of_interest[target_id][0] < IMAGE_WIDTH and \
-                        0 < compositions_of_interest[target_id][1] < IMAGE_HEIGHT:
-                        pose_composition_msg.data.append(target_id)
-                        pose_composition_msg.data.append(compositions_of_interest[target_id][0])
-                        pose_composition_msg.data.append(compositions_of_interest[target_id][1])
-
-                self.__pub_snap_shot_info.publish(pose_composition_msg)
-                print "MAIN: shoot"
+                self.shoot()
 
             # finger up
             elif int(data.data[0]) is ord('Q'):
                 self.__user.reset_intention(self.__orb.get_orientation())
 
             # orbiting
-            elif int(data.data[0]) is ord('o'):
-                # TODO: fake orbit with zigzag
-                if len(self.__user.get_composed_targets()) is not 1:
-                    print "MAIN: falied to start orbit, because number of targets is", len(self.__user.get_composed_targets())
-                    return
-
+            elif int(data.data[0]) is ord('O'):
                 target_id = self.__user.get_composed_targets()[0]
                 self.__planner.plan_zigzag(self.__target_manager.get_target(target_id))
-
-                self.__stage = STAGE.stage_zigzag
-                self.pub_orbit.publish("")
+                self.__stage = STAGE.stage_circle
+                # self.pub_orbit.publish("yellow")
                 print "MAIN: start orbiting"
+
+            # orbiting
+            elif int(data.data[0]) is ord('o'):
+                self.__planner.reset_zigzag()
+                self.__stage = STAGE.stage_idle
+                # self.pub_orbit.publish("grey")
+                print "MAIN: stop orbiting"
 
             # zigzag
 
@@ -357,7 +427,8 @@ class BEBOP_GCS(object):
 
             # zoom
             elif int(data.data[0]) is ord('Z'):
-                self.__user.set_intention_from_user_control(self.__orb.get_cam2world_as_matrix(), 0, 0, (data.data[1] - 1.0) * 0.5, 0, 0)
+                self.__user.set_intention_from_user_control(self.__orb.get_cam2world_as_matrix(), 0, 0, data.data[1] - 1., 0, 0)
+                print "MAIN: zoom factor is", data.data[1] - 1.
 
         elif len(data.data) is 3:
             # move around
@@ -376,8 +447,15 @@ class BEBOP_GCS(object):
                 print "MAIN: user compose target", data.data[1], "to", data.data[2], data.data[3]
                 self.__user.set_target_composition(data.data[1], [data.data[2], data.data[3]])
 
-        # restore, input data with format ['r', X, Y, Z, rx, ry, rz, rw, [id, u, v]]
-        elif int(data.data[0]) is ord('r'):
+        # restore, input data with format ['R', X, Y, Z, rx, ry, rz, rw, [id, u, v]]
+        elif int(data.data[0]) is ord('R'):
+            position = [data.data[1], data.data[2], data.data[3]]
+            orientation = transformations.euler_from_quaternion([data.data[4], data.data[5], data.data[6], data.data[7]], axes='ryxz')
+            compositions = dict()
+            for i in range((len(data.data) - 8) / 3):
+                compositions[data.data[3 * i + 8]] = [data.data[3 * i + 9], data.data[3 * i + 10]]
+
+            self.__planner.plan_restore(position, orientation, compositions)
             self.__stage = STAGE.stage_restore
             print "MAIN: start restoring"
 

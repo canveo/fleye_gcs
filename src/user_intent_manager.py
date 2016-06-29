@@ -10,6 +10,7 @@ from geometry_msgs.msg import Pose
 
 from tf import transformations
 from constant import *
+from vector import *
 
 import math
 
@@ -105,6 +106,8 @@ class USER_INTENT_MANAGER(object):
     def set_intention_from_user_control(self, cam2world_4x4, user_right, user_down, user_forward, user_pan_right, user_tilt_down):
         # intended position offset
         user_translation_camera_3x1 = np.array([[user_right, user_down, user_forward]]).T
+        # if length_of_vector(user_translation_camera_3x1) > 0:
+        #     user_translation_camera_3x1 += ERROR_TOLERANCE_Control_xyz / length_of_vector(user_translation_camera_3x1) * user_translation_camera_3x1
         user_translation_world_3x1 = np.dot(cam2world_4x4[:3,:3], user_translation_camera_3x1)
 
         # user_translation_world_4x1 = np.dot(cam2world_4x4, user_translation_camera_4x1)

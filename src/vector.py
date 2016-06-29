@@ -8,6 +8,8 @@ from tf import transformations
 
 # c.f. http://www.lighthouse3d.com/tutorials/maths/vector-projection/
 def project_from_to(f, t):
+    if LA.norm(t) == 0:
+        return t
     return np.dot(f, t) / LA.norm(t) * t
 
 def distance_between(a, b):

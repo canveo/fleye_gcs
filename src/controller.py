@@ -3,7 +3,8 @@ import roslib
 # roslib.load_manifest('fleye_controller')
 import rospy
 
-from geometry_msgs.msg import Transform
+from std_msgs.msg import Header
+from geometry_msgs.msg import Transform, Point, PointStamped
 
 import cmd_manager,angle
 from tf import transformations
@@ -50,6 +51,8 @@ class CONTROLLER(object):
         self.__srv_reflexxes_control = rospy.ServiceProxy('fleye/reflexxes_control', ReflexxesControl)
 
         # debug
+        self.__pub_target_position = rospy.Publisher('fleye/debug/controller_target_position', PointStamped, queue_size=1)
+
         self.__pub_virtualcamera_pan = rospy.Publisher('fleye/debug/virtual_camera_pan', Float32, queue_size=1)
         self.__pub_target_pan_world = rospy.Publisher('fleye/debug/target_pan_world', Float32, queue_size=1)
         self.__pub_current_pan_world = rospy.Publisher('fleye/debug/current_pan_world', Float32, queue_size=1)
@@ -309,6 +312,15 @@ class CONTROLLER(object):
         self.__pub_reflexxes_ax.publish(response.ax)
         self.__pub_reflexxes_ay.publish(response.ay)
         self.__pub_reflexxes_az.publish(response.az)
+
+    def pub_debug_info(self):
+        if self.__target_image_position is not None:
+            target_position = PointStamped()
+            target_position.header = Header()
+            target_position.header.frame_id = FRAME_ID_WORLD
+            target_position.point = Point(self.__target_image_position[0], self.__target_image_position[1], self.__target_image_position[2])
+
+            self.__pub_target_position.publish(target_position)
 
 # # input:
 # # goal_pose and current_pose are Pose in FRAME_ID_WORLD
