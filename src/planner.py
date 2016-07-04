@@ -29,6 +29,11 @@ class PLANNER(object):
         self.__restore_orientation = None   #format: [pan_world, tilt_world, roll_world]
         self.__restore_compositions = None   #format: { target_id : (u,v) }
 
+        # pano
+        self.__start_orientation = None # format: [pan_world, tilt_world, roll_world]
+        self.__pano_waypoints = []      # format: [[pan_world, tilt_world] ...]
+        self.__pano_waypoint_count = None
+
         # common for zigzag and circle
         self.__target = None            # format: Target
         self.__start_position = None    # format: [x_world, y_world, z_world]
@@ -100,16 +105,64 @@ class PLANNER(object):
     def get_restore_compositions(self):
         return self.__restore_compositions
 
+    # --------------------------------------------- PANO
+    def plan_pano(self, orientation, number_of_shots=8):
+        self.__start_orientation = orientation
+        self.__pano_waypoints = []
+        for i in range(number_of_shots):
+            self.__pano_waypoints.append([orientation[0] + i * 2 * math.pi / number_of_shots, orientation[1]])
+        self.__pano_waypoint_count = 0
+
+    def is_pano_done(self):
+        return self.__pano_waypoint_count >= len(self.__pano_waypoints)
+
+    def reset_pano(self):
+        self.__start_orientation = None
+        self.__pano_waypoints = []
+        self.__pano_waypoint_count = None
+
+    def is_pano_current_waypoint_reached(self, position, orientation):
+        # check distance
+        if abs(distance_between(np.array(self.__hover_position), np.array(position))) > ERROR_TOLERANCE_Control_xyz * ERROR_TOLERANCE_hover_factor:
+            return False
+
+        # check orientation
+        if abs(rad_from_to(orientation[0], self.__pano_waypoints[self.__pano_waypoint_count][0])) > ERROR_TOLERANCE_Control_pan * ERROR_TOLERANCE_hover_factor:
+            return False
+        if abs(rad_from_to(orientation[1], self.__pano_waypoints[self.__pano_waypoint_count][1])) > ERROR_TOLERANCE_Control_tilt * ERROR_TOLERANCE_hover_factor:
+            return False
+
+        return True
+
+    def get_current_pano_waypoint(self):
+        return self.__pano_waypoints[self.__pano_waypoint_count]
+
+    def update_pano_waypoint(self):
+        self.__pano_waypoint_count += 1
+
     # --------------------------------------------- ZIGZAG
-    def plan_zigzag(self, target, number_of_rows=3, number_of_shots_each_side = 2, angle_interval = 20. * math.pi / 180.):  #TODO: number_of_rows
+    def plan_zigzag(self, target, number_of_rows_each_side=1, number_of_columns_each_side = 2,
+                    angle_interval_between_rows = 20. * math.pi / 180., angle_interval_between_columns =20. * math.pi / 180.):  #TODO: number_of_rows
         self.__target = target
         self.__start_position = self.__hover_position               #TODO: self.__hover_position is not None
         self.__distance_to_target = distance_between(np.array(self.__target.get_center()), np.array(self.__start_position))
 
+        waypoints_matrix = dict()
+        tilt_norm_1x3 = np.cross(np.array(self.__target.get_center()) - np.array(self.__start_position), np.array([0,1,0]))
+        for row in range(-number_of_rows_each_side, number_of_rows_each_side + 1):
+            waypoints_matrix[(row, 0)] = rotate(np.array(self.__start_position).T, - angle_interval_between_rows * row, tilt_norm_1x3, np.array(self.__target.get_center()).T)
+
+        for col in range(-number_of_columns_each_side, number_of_columns_each_side + 1):
+            for row in range(-number_of_rows_each_side, number_of_rows_each_side + 1):
+                waypoints_matrix[(row, col)] = rotate(waypoints_matrix[(row, 0)].T, - angle_interval_between_columns * col, (0,1,0), np.array(self.__target.get_center()).T)
+
         self.__waypoints = []
-        for i in range(2 * number_of_shots_each_side + 1):
-            waypoint_1x3 = rotate(np.array(self.__start_position).T, angle_interval * (number_of_shots_each_side - i), (0,1,0), np.array(self.__target.get_center()).T)
-            self.__waypoints.append([waypoint_1x3[0], waypoint_1x3[1], waypoint_1x3[2]])
+        for col in range(-number_of_columns_each_side, number_of_columns_each_side + 1):
+            for row in range(-number_of_rows_each_side, number_of_rows_each_side + 1):
+                if col % 2  == number_of_columns_each_side % 2:
+                    self.__waypoints.append(waypoints_matrix[(row, col)])
+                else:
+                    self.__waypoints.append(waypoints_matrix[(row, -col)])
 
         self.__waypoint_count = 0
 
@@ -160,8 +213,66 @@ class PLANNER(object):
         return True
 
 
+    # --------------------------------------------- ORBIT
+    def plan_orbit(self, target, number_of_shots=8):
+        self.__target = target
+        self.__start_position = self.__hover_position               #TODO: self.__hover_position is not None
+        self.__distance_to_target = distance_between(np.array(self.__target.get_center()), np.array(self.__start_position))
 
-    # common for all
+        self.__waypoints = []
+        for i in range(number_of_shots):
+            waypoint_1x3 = rotate(np.array(self.__start_position).T, i * 2 * math.pi / number_of_shots, (0,1,0), np.array(self.__target.get_center()).T)
+            self.__waypoints.append([waypoint_1x3[0], waypoint_1x3[1]])
+
+        self.__waypoint_count = 0
+
+    def is_orbit_done(self):
+        return self.__waypoint_count >= len(self.__waypoints)
+
+    def reset_orbit(self):
+        self.__hover_position = self.__start_position if self.__waypoint_count >= len(self.__waypoints) or self.__waypoint_count == 0 else self.__waypoints[self.__waypoint_count - 1]
+        self.__target = None
+        self.__start_position = None
+        self.__distance_to_target = None
+        self.__waypoints = []
+        self.__waypoint_count = None
+
+    def is_orbit_current_waypoint_reached(self, position, intended_composition, current_composition):
+        return self.__is_orbit_waypoint_reached(position, self.__waypoint_count, intended_composition, current_composition)
+
+    def get_current_orbit_waypoint(self):
+        return self.__waypoints[self.__waypoint_count]
+
+    def update_orbit_waypoint(self):
+        self.__waypoint_count += 1
+
+    # TODO: implemement this to enable shared control
+    # def update_position_during_zigzag(self, position, offset_direction):
+
+    # TODO: exact same function as __is_zigzag_waypoint_reached
+    def __is_orbit_waypoint_reached(self, position, waypoint_index, intended_composition, current_composition):
+        # check composition
+        if not self.__is_target_well_composed(intended_composition, current_composition):
+            # print "PLANNER: zigzag\tbad composition"
+            return False
+
+        # check distance
+        if abs(distance_between(np.array(self.__target.get_center()), np.array(position)) / self.__distance_to_target - 1) > ERROR_TOLERANCE_distance_ratio_to_target:
+            # print "PLANNER: zigzag\tgood composition\tbad distance", abs(distance_between(np.array(self.__target.get_center()), np.array(position)) / self.__distance_to_target - 1)
+            return False
+
+        # check pan and tilt wrt target
+        target_to_current = np.array(position) - np.array(self.__target.get_center())
+        target_to_waypoint = np.array(self.__waypoints[waypoint_index]) - np.array(self.__target.get_center())
+
+        if angle_between(target_to_current, target_to_waypoint) > ERROR_TOLERANCE_angle_difference_wrt_target:
+            # print "PLANNER: zigzag\tgood composition\tgood distance\tbad angle", angle_between(target_to_current, target_to_waypoint) * 180. / math.pi
+            return False
+
+        return True
+
+
+    # --------------------------------------------- common for zigzag and orbit
     def get_target(self):
         return self.__target
 

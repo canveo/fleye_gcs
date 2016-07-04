@@ -4,7 +4,7 @@ import roslib
 import rospy
 
 from std_msgs.msg import Header
-from geometry_msgs.msg import Transform, Point, PointStamped
+from geometry_msgs.msg import Transform, Point, PointStamped, PoseStamped, Quaternion
 
 import cmd_manager,angle
 from tf import transformations
@@ -52,6 +52,7 @@ class CONTROLLER(object):
 
         # debug
         self.__pub_target_position = rospy.Publisher('fleye/debug/controller_target_position', PointStamped, queue_size=1)
+        self.__pub_target_pose = rospy.Publisher('fleye/debug/controller_target_pose', PoseStamped, queue_size=1)
 
         self.__pub_virtualcamera_pan = rospy.Publisher('fleye/debug/virtual_camera_pan', Float32, queue_size=1)
         self.__pub_target_pan_world = rospy.Publisher('fleye/debug/target_pan_world', Float32, queue_size=1)
@@ -321,6 +322,19 @@ class CONTROLLER(object):
             target_position.point = Point(self.__target_image_position[0], self.__target_image_position[1], self.__target_image_position[2])
 
             self.__pub_target_position.publish(target_position)
+
+            if self.__target_pan_world is not None and self.__target_tilt_world is not None:
+                target_pose = PoseStamped()
+                target_pose.header = Header()
+                target_pose.header.frame_id = FRAME_ID_WORLD
+                target_pose.pose.position = Point(self.__target_image_position[0], self.__target_image_position[1], self.__target_image_position[2])
+
+                q = transformations.quaternion_from_euler(self.__target_pan_world - math.pi / 2, -self.__target_tilt_world, 0, axes='ryzx') # note the axis is 'ryzx'
+
+                target_pose.pose.orientation = Quaternion(q[0], q[1], q[2], q[3])
+
+                self.__pub_target_pose.publish(target_pose)
+
 
 # # input:
 # # goal_pose and current_pose are Pose in FRAME_ID_WORLD

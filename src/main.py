@@ -43,7 +43,7 @@ import Queue
 class STAGE():
     stage_init      =0
     stage_idle      =1
-    stage_circle    =2
+    stage_orbit    =2
     stage_zigzag    =3
     stage_pano      =4
     stage_restore   =5
@@ -102,7 +102,7 @@ class BEBOP_GCS(object):
             self.pub_pano.publish("yellow")
             self.pub_orbit.publish("grey")
             self.pub_zigzag.publish("grey")
-        elif self.__stage is STAGE.stage_circle:
+        elif self.__stage is STAGE.stage_orbit:
             self.pub_pano.publish("grey")
             self.pub_orbit.publish("yellow")
             self.pub_zigzag.publish("grey")
@@ -220,6 +220,7 @@ class BEBOP_GCS(object):
             if self.__planner.is_restore_done(self.__orb.get_position(),
                                               self.__orb.get_orientation(),
                                               self.__target_manager.get_target_compositions(self.__planner.get_restore_compositions().keys())):
+                self.__user.reset_intention([self.__planner.get_restore_orientation()[0], self.__planner.get_restore_orientation()[1]]) # a hacky way to handle orientation after restore
                 self.__planner.reset_restore()
                 self.__stage = STAGE.stage_idle
                 print "MAIN: restore done"
@@ -239,8 +240,77 @@ class BEBOP_GCS(object):
             pan, tilt = self.__cmd.set_tilt_pan(self.__controller.get_control_goal_tilt(), self.__controller.get_control_goal_pan())
             self.__imu.set_tilt_pan(tilt, pan)
 
+        elif self.__stage is STAGE.stage_pano:
+            # CONTROLLER: set current state
+            tilt, pan = self.__imu.get_tilt_pan()
+            self.__controller.set_current_state(self.__orb.get_position(),
+                                                self.__orb.get_orientation(),
+                                                self.__orb.get_velocity(),
+                                                dict(),                     # while pano, no target is composed
+                                                pan, tilt)
+
+            # PLANNER: check pano stage
+            if self.__planner.is_pano_current_waypoint_reached(self.__orb.get_position(), self.__orb.get_orientation()):
+                self.shoot()
+                self.__planner.update_pano_waypoint()
+            if self.__planner.is_pano_done():
+                self.__planner.reset_pano()
+                self.__stage = STAGE.stage_idle
+                print "MAIN: pano done"
+                return
+
+            # CONTROLLER: set target state
+            self.__controller.set_target_state(self.__planner.get_hover_position(),
+                                               [0,0,0],
+                                               dict(),
+                                               self.__planner.get_current_pano_waypoint())
+
+            # compute
+            self.__controller.compute_control()
+
+            # control
+            self.__cmd.send_cmd_vel(self.__controller.get_control_forward(), self.__controller.get_control_left(), self.__controller.get_control_up(), self.__controller.get_control_turn_left())
+            pan, tilt = self.__cmd.set_tilt_pan(self.__controller.get_control_goal_tilt(), self.__controller.get_control_goal_pan())
+            self.__imu.set_tilt_pan(tilt, pan)
+
+
         # TODO: enable shared control during autopilot
-        elif self.__stage is STAGE.stage_circle:
+        elif self.__stage is STAGE.stage_orbit:
+            # CONTROLLER: set current state
+            tilt, pan = self.__imu.get_tilt_pan()
+            self.__controller.set_current_state(self.__orb.get_position(),
+                                                self.__orb.get_orientation(),
+                                                self.__orb.get_velocity(),
+                                                self.__target_manager.get_target_compositions(self.__user.get_composed_targets()),
+                                                pan, tilt)
+
+            # PLANNER: check orbit stage
+            if self.__planner.is_orbit_current_waypoint_reached(self.__orb.get_position(),
+                                                                self.__user.get_compositions()[self.__planner.get_target().get_id()],
+                                                                self.__target_manager.get_target_composition(self.__planner.get_target().get_id())):
+                self.shoot()
+                self.__planner.update_orbit_waypoint()
+            if self.__planner.is_orbit_done():
+                self.__planner.reset_orbit()
+                self.__stage = STAGE.stage_idle
+                print "MAIN: orbit done"
+                return
+
+            # CONTROLLER: set target state
+            self.__controller.set_target_state(self.__planner.get_current_orbit_waypoint(),
+                                               [0,0,0],
+                                               self.__user.get_composed_compositions(),
+                                               [None, None])
+
+            # compute
+            self.__controller.compute_control()
+
+            # control
+            self.__cmd.send_cmd_vel(self.__controller.get_control_forward(), self.__controller.get_control_left(), self.__controller.get_control_up(), self.__controller.get_control_turn_left())
+            pan, tilt = self.__cmd.set_tilt_pan(self.__controller.get_control_goal_tilt(), self.__controller.get_control_goal_pan())
+            self.__imu.set_tilt_pan(tilt, pan)
+
+        elif self.__stage is STAGE.stage_zigzag:
             # CONTROLLER: set current state
             tilt, pan = self.__imu.get_tilt_pan()
             self.__controller.set_current_state(self.__orb.get_position(),
@@ -394,24 +464,45 @@ class BEBOP_GCS(object):
 
             # finger up
             elif int(data.data[0]) is ord('Q'):
-                self.__user.reset_intention(self.__orb.get_orientation())
+                if self.__stage is STAGE.stage_idle:
+                    self.__user.reset_intention(self.__orb.get_orientation())
+
+            # pano
+            elif int(data.data[0]) is ord('P'):
+                self.__planner.plan_pano(self.__orb.get_orientation())
+                self.__stage = STAGE.stage_pano
+                print "MAIN: start panoing"
+            elif int(data.data[0]) is ord('p'):
+                self.__user.reset_intention(self.__planner.get_current_pano_waypoint())     # a hacky way of handling stop pano
+                self.__planner.reset_pano()
+                self.__stage = STAGE.stage_idle
+                print "MAIN: stop panoing"
 
             # orbiting
             elif int(data.data[0]) is ord('O'):
                 target_id = self.__user.get_composed_targets()[0]
-                self.__planner.plan_zigzag(self.__target_manager.get_target(target_id))
-                self.__stage = STAGE.stage_circle
+                self.__planner.plan_orbit(self.__target_manager.get_target(target_id))
+                self.__stage = STAGE.stage_orbit
                 # self.pub_orbit.publish("yellow")
                 print "MAIN: start orbiting"
-
-            # orbiting
             elif int(data.data[0]) is ord('o'):
-                self.__planner.reset_zigzag()
+                self.__planner.reset_orbit()
                 self.__stage = STAGE.stage_idle
                 # self.pub_orbit.publish("grey")
                 print "MAIN: stop orbiting"
 
             # zigzag
+            elif int(data.data[0]) is ord('Z'):
+                target_id = self.__user.get_composed_targets()[0]
+                self.__planner.plan_zigzag(self.__target_manager.get_target(target_id))
+                self.__stage = STAGE.stage_zigzag
+                # self.pub_orbit.publish("yellow")
+                print "MAIN: start zigzaging"
+            elif int(data.data[0]) is ord('z'):
+                self.__planner.reset_zigzag()
+                self.__stage = STAGE.stage_idle
+                # self.pub_orbit.publish("grey")
+                print "MAIN: stop zigzaging"
 
         elif len(data.data) is 2:
             # confirm target with id
@@ -422,8 +513,8 @@ class BEBOP_GCS(object):
 
             # cancel target with id
             elif int(data.data[0]) is ord('N'):
-                # self.reset_tracker(data.data[1])
-                self.__user.cancel_target(data.data[1])
+                if self.__stage is STAGE.stage_idle:
+                    self.__user.cancel_target(data.data[1])
 
             # zoom
             elif int(data.data[0]) is ord('Z'):
@@ -493,6 +584,7 @@ class BEBOP_GCS(object):
             print "MAIN: user select target", new_target.get_id(), "at", new_target_composition[0], new_target_composition[1]
 
             self.__stage = STAGE.stage_idle
+
 
             # if len(data.data) % 2 is 1 and self.image_raw_buffer is not None:
             #     min_x = None
@@ -737,6 +829,8 @@ class BEBOP_GCS(object):
     #
     # def is_target_well_composed(self, tolerance_ratio=1.0):
     #     return (self.u - self.target_u) ** 2 + (self.v - self.target_v) ** 2 <= 1000 * tolerance_ratio * tolerance_ratio
+
+
 
 if __name__ == '__main__':
     gcs = BEBOP_GCS()

@@ -87,3 +87,5 @@ ERROR_TOLERANCE_distance_ratio_to_target = 0.2
 ERROR_TOLERANCE_angle_difference_wrt_target = 7. * math.pi / 180. # radian
 ERROR_TOLERANCE_Composition_pan_factor = 3
 ERROR_TOLERANCE_Composition_tilt_factor = 3
+
+ERROR_TOLERANCE_hover_factor = 1.5
