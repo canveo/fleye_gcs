@@ -20,26 +20,6 @@ from constant import *
 
 import Queue
 
-# from pid_controller import *
-# from hover import *
-
-# from tld_module import NUM_OF_TRACKERS
-
-# class TRACKED_TARGET(object):
-#     def __init__(self, id):
-#         self.id = id
-#         self.u = None
-#         self.v = None
-#         self.accuracy = 0
-#
-#     def reset(self):
-#         self.u = None
-#         self.v = None
-#         self.accuracy = 0
-#
-#     def is_idle(self):
-#         return self.u is None
-
 class STAGE():
     stage_init      =0
     stage_idle      =1

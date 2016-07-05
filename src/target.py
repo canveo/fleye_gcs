@@ -11,6 +11,7 @@ import numpy as np
 from tf import transformations
 
 from constant import *
+from vector import *
 
 from threading import Lock
 
@@ -59,6 +60,9 @@ class Target(object):
 
     def get_center_as_point32(self):
         return Point32(self.__x, self.__y, self.__z)
+
+    def get_center_3x1(self):
+        return np.array([[self.__x, self.__y, self.__z]]).T
 
     def get_center_4x1(self):
         return np.array([[self.__x, self.__y, self.__z, 1]]).T
@@ -192,3 +196,28 @@ class TARGET_MANAGER(object):
         half_w = wh_screen_3x1[0,0] / wh_screen_3x1[2,0] - CAMERA_Cx
         half_h = wh_screen_3x1[1,0] / wh_screen_3x1[2,0] - CAMERA_Cy
         return [u, v, half_w, half_h]
+
+    # position: format is [x_world, y_world, z_world]
+    # composition: format is [u,v]
+    # return: [pan, tilt]
+    def compute_camera_orientation(self, target_id, position, composition):
+        target_cam_3x1 = np.dot(CAMERA_MATRIX_INV, np.array([[composition[0], composition[1], 1]]).T)
+        target_cam_3x1_homo = target_cam_3x1 / target_cam_3x1[2,0]
+
+        # solve equation a * (Z_c) ^ 2 + b * Z_c + c = 0
+        a = np.dot(target_cam_3x1_homo.T, target_cam_3x1_homo)
+        b = -2 * np.dot(target_cam_3x1_homo.T, np.array(position).T)
+        c = np.dot(np.array(position), np.array(position).T) - np.dot(self.__targets[target_id].get_center_3x1().T, self.__targets[target_id].get_center_3x1())
+        Z_c = (-b + (b**2 - 4 * a * c)**0.5 ) / (2 * a)
+        print "TARGET: Z_c is", Z_c, "or", (-b - (b**2 - 4 * a * c)**0.5 ) / (2 * a)
+
+        target_cam_3x1_scaled = Z_c * target_cam_3x1_homo
+        print "TARGET: this should be 0:", length_of_vector(target_cam_3x1_scaled) - length_of_vector(np.array(position))
+
+        #TODO: finish implementation
+
+
+    # position: format is [x_world, y_world, z_world]
+    # orientation: format is [pan, tilt]
+    def compute_composition_error(self, target_id, position, orientation):
+        pass    #TODO: finish implementation

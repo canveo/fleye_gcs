@@ -68,12 +68,12 @@ ERROR_TOLERANCE_Control_yaw = 15. * math.pi / 180.   # radian
 ERROR_TOLERANCE_Control_xyz = 0.2                           # unit in orb
 ERROR_TOLERANCE_Control_x = ERROR_TOLERANCE_Control_xyz     # unit in orb
 ERROR_TOLERANCE_Control_y = ERROR_TOLERANCE_Control_xyz     # unit in orb
-ERROR_TOLERANCE_Control_z = ERROR_TOLERANCE_Control_xyz     # unit in orb
+ERROR_TOLERANCE_Control_z = 0#ERROR_TOLERANCE_Control_xyz  / 10.   # unit in orb
 
 # control gain for reflexxes
 GAIN_R_left = 1./30.
 GAIN_R_forward = 1./30.
-GAIN_R_up = 1./30.
+GAIN_R_up = 1./20.
 
 GCS_LOOP_FREQUENCY = 30.
 ORB_SLAM_FREQUENCY = 29.
