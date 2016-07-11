@@ -6,7 +6,7 @@ import rospy
 
 from std_msgs.msg import Header, Empty, Float32, Float32MultiArray, String, Int32, Bool
 from sensor_msgs.msg import Image, CompressedImage, ChannelFloat32, PointCloud
-from geometry_msgs.msg import Pose, PoseStamped                                     #http://docs.ros.org/api/geometry_msgs/html/index-msg.html
+from geometry_msgs.msg import Pose, PoseStamped, Point32                                     #http://docs.ros.org/api/geometry_msgs/html/index-msg.html
 
 from tf import transformations
 
@@ -17,6 +17,7 @@ import cmd_manager, imu_manager, angle, orb_slam_manager, user_intent_manager, t
 from target import Target
 
 from constant import *
+from vector import *
 
 import Queue
 
@@ -67,6 +68,8 @@ class BEBOP_GCS(object):
         rospy.Subscriber('fleye/debug/keyboard_overtake', Bool, self.overtake_callback)
         self.__is_overtaken = False
 
+        self.__pub_hover_positions = rospy.Publisher('fleye/debug/main_hover_positions', PointCloud, queue_size=1)
+
         # MAIN LOOP
         rospy.Timer(rospy.Duration(1./GCS_LOOP_FREQUENCY), self.main_routine)
 
@@ -98,6 +101,75 @@ class BEBOP_GCS(object):
             self.pub_pano.publish("grey")
             self.pub_orbit.publish("grey")
             self.pub_zigzag.publish("grey")
+
+    def __best_hover_position(self):
+        # if self.__planner.get_hover_position() is None:
+        #     return self.__orb.get_position()
+        positions = dict()
+        for x in range(-4, 5):
+            for y in range(-3, 4):
+                for z in range(-4, 5):
+                    positions[(x,y,z)] = [self.__orb.get_position()[0] + x**2 * (0.25 if x > 0 else -0.25),
+                                          self.__orb.get_position()[1] + y**2 * (0.25 if y > 0 else -0.25),
+                                          self.__orb.get_position()[2] + z**2 * (0.25 if z > 0 else -0.25)]
+
+        composition_errors = dict()
+        for key in positions.keys():
+            best_orientations = []
+            composition_error = 0
+
+            for target_id in self.__user.get_composed_compositions().keys():
+                orientation = self.__target_manager.compute_camera_orientation(positions[key], target_id, self.__user.get_composed_compositions()[target_id])
+                if orientation is not None:
+                    best_orientations.append(orientation)
+
+            average_pan = np.average(map(lambda orientation: orientation[0], best_orientations))
+            average_tilt = np.average(map(lambda orientation: orientation[1], best_orientations))
+            average_orientation = [average_pan, average_tilt]
+
+            # if len(best_orientations) is not 0:
+            #     print "MAIN: best_orientations[0]", best_orientations[0]
+            # print "MAIN: average_orientation", average_orientation
+
+            for target_id in self.__user.get_composed_compositions().keys():
+                composition_error += self.__target_manager.compute_composition_error(positions[key], average_orientation, target_id, self.__user.get_composed_compositions()[target_id])
+
+            if len(self.__user.get_composed_compositions()) == 0:
+                return self.__orb.get_position()
+
+            composition_errors[key] = composition_error / len(self.__user.get_composed_compositions())
+
+            # if key == (0,0,0):
+            #     print "MAIN: (0,0,0) is ", self.__orb.get_position(), "pan tilt is", average_pan, average_tilt
+            #     if len(self.__user.get_composed_compositions().keys()) > 0:
+            #         print "MAIN: target is", self.__target_manager.get_target(self.__user.get_composed_compositions().keys()[0]).get_center()
+
+        best_key = (0,0,0)
+        for key in composition_errors.keys():
+            if composition_errors[key] + distance_between(np.array(self.__orb.get_position()), np.array(positions[key])) * ERROR_TOLERANCE_lazy_factor_px_per_meter  \
+                < composition_errors[best_key] + distance_between(np.array(self.__orb.get_position()), np.array(positions[best_key])) * ERROR_TOLERANCE_lazy_factor_px_per_meter:
+                best_key = key
+
+        # print "MAIN: (0,0,0) is ", self.__orb.get_position(), "error is", composition_errors[(0,0,0)]
+        # print "MAIN: error at best", composition_errors[best_key]
+# ==================
+        hoverPositionMsg = PointCloud()
+
+        channel_error = ChannelFloat32()
+        channel_error.name = "composition error"
+
+        hoverPositionMsg.header = self.__orb.get_header()
+        hoverPositionMsg.header.frame_id = FRAME_ID_WORLD
+
+        for key in positions.keys():
+            hoverPositionMsg.points.append(Point32(positions[key][0], positions[key][1], positions[key][2]))
+            channel_error.values.append(composition_errors[key] + distance_between(np.array(self.__orb.get_position()), np.array(positions[key])) * ERROR_TOLERANCE_lazy_factor_px_per_meter)
+
+        hoverPositionMsg.channels.append(channel_error)
+
+        self.__pub_hover_positions.publish(hoverPositionMsg)
+#=====================
+        return positions[best_key]
 
     def main_routine(self, event):
         # pub interface look
@@ -162,10 +234,14 @@ class BEBOP_GCS(object):
                                                 pan, tilt)
 
             # PLANNER: set hover position
-            if self.__planner.get_hover_position() is None:
-                self.__planner.set_hover_position(self.__orb.get_position())
-
-            elif self.__user.get_intended_position_offset() is not None:
+            if len(self.__user.get_composed_targets()) is 0:
+                if self.__planner.get_hover_position() is None:
+                    self.__planner.set_hover_position(self.__orb.get_position())
+            else:
+                self.__planner.set_hover_position(self.__best_hover_position())
+            # if self.__planner.get_hover_position() is None:
+            #     self.__planner.set_hover_position(self.__orb.get_position())
+            if self.__user.get_intended_position_offset() is not None:
                 self.__planner.update_hover_position(self.__orb.get_position(),
                                                      self.__user.get_intended_position_offset())
             # CONTROLLER: set target state
@@ -359,6 +435,7 @@ class BEBOP_GCS(object):
         self.reset_pan_tilt()
         self.cancel_all_targets()
         self.__stage = STAGE.stage_idle
+        self.__user.cancel_all_targets()
 
     # def reset_all(self):
     #     # self.reset_all_trackers()
@@ -487,8 +564,8 @@ class BEBOP_GCS(object):
         elif len(data.data) is 2:
             # confirm target with id
             if int(data.data[0]) is ord('V'):
-                print "MAIN: user confirm target", data.data[1]
                 u, v, w, h = self.__target_manager.get_target_composition(data.data[1])
+                print "MAIN: user confirm target", data.data[1], "at", u, v
                 self.__user.set_target_composition(data.data[1], [u, v])
 
             # cancel target with id

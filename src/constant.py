@@ -89,3 +89,5 @@ ERROR_TOLERANCE_Composition_pan_factor = 3
 ERROR_TOLERANCE_Composition_tilt_factor = 3
 
 ERROR_TOLERANCE_hover_factor = 1.5
+
+ERROR_TOLERANCE_lazy_factor_px_per_meter = 30.

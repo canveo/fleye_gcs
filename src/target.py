@@ -199,25 +199,53 @@ class TARGET_MANAGER(object):
 
     # position: format is [x_world, y_world, z_world]
     # composition: format is [u,v]
-    # return: [pan, tilt]
-    def compute_camera_orientation(self, target_id, position, composition):
-        target_cam_3x1 = np.dot(CAMERA_MATRIX_INV, np.array([[composition[0], composition[1], 1]]).T)
-        target_cam_3x1_homo = target_cam_3x1 / target_cam_3x1[2,0]
+    # return: [pan_world, tilt_world]
+    def compute_camera_orientation(self, position, target_id, composition, is_testing = False):
+        # R_c2w * C^-1 * [u,v,1].T = Target_world - t_c2w
+        # lhs = C^-1 * [u,v,1].T AND rhs = Target_world - t_c2w
+        lhs_3x1 = np.dot(CAMERA_MATRIX_INV, np.array([[composition[0], composition[1], 1]]).T)
+        rhs_3x1 = self.__targets[target_id].get_center_3x1() - np.array([position]).T
 
-        # solve equation a * (Z_c) ^ 2 + b * Z_c + c = 0
-        a = np.dot(target_cam_3x1_homo.T, target_cam_3x1_homo)
-        b = -2 * np.dot(target_cam_3x1_homo.T, np.array(position).T)
-        c = np.dot(np.array(position), np.array(position).T) - np.dot(self.__targets[target_id].get_center_3x1().T, self.__targets[target_id].get_center_3x1())
-        Z_c = (-b + (b**2 - 4 * a * c)**0.5 ) / (2 * a)
-        print "TARGET: Z_c is", Z_c, "or", (-b - (b**2 - 4 * a * c)**0.5 ) / (2 * a)
+        lhs_3x1_u = lhs_3x1 / length_of_vector(lhs_3x1)
+        rhs_3x1_u = rhs_3x1 / length_of_vector(rhs_3x1)
 
-        target_cam_3x1_scaled = Z_c * target_cam_3x1_homo
-        print "TARGET: this should be 0:", length_of_vector(target_cam_3x1_scaled) - length_of_vector(np.array(position))
+        X_l, Y_l, Z_l = lhs_3x1_u[0,0], lhs_3x1_u[1,0], lhs_3x1_u[2,0]
+        X_r, Y_r, Z_r = rhs_3x1_u[0,0], rhs_3x1_u[1,0], rhs_3x1_u[2,0]
 
-        #TODO: finish implementation
+        bb_4ac = Z_l**2 + Y_l**2 - Y_r**2
+        if bb_4ac < 0:
+            return None # sqrt of b^2 - 4ac is bad
 
+        cos_t1 = (Y_l * Y_r + Z_l * bb_4ac ** 0.5) / (Z_l**2 + Y_l**2)
+        cos_t2 = (Y_l * Y_r - Z_l * bb_4ac ** 0.5) / (Z_l**2 + Y_l**2)
+
+        cos_t = cos_t1 if cos_t1 > cos_t2 else cos_t2
+
+        if cos_t < 0:
+            return None # tilt angle in Quadrant II or III
+
+        sin_t = (cos_t * Y_l - Y_r) / Z_l
+
+        tilt = np.arccos(cos_t) * (1 if sin_t > 0 else -1)
+
+        b = sin_t * Y_l + cos_t * Z_l
+        sin_p = (X_r * b - Z_r * X_l) / (b**2 + X_l**2)
+        cos_p = (Z_r * b + X_r * X_l) / (b**2 + X_l**2)
+
+        pan = np.arccos(cos_p) * (1 if sin_p > 0 else -1)
+
+        return [pan, tilt]
 
     # position: format is [x_world, y_world, z_world]
-    # orientation: format is [pan, tilt]
-    def compute_composition_error(self, target_id, position, orientation):
-        pass    #TODO: finish implementation
+    # orientation: format is [pan_world, tilt_world]
+    def compute_composition_error(self, position, orientation, target_id, composition):
+        R_4x4 = transformations.euler_matrix(orientation[0], orientation[1], 0, 'ryxz')
+        T_4x4 = transformations.translation_matrix(position)
+
+        world2cam_4x4 = inv(transformations.concatenate_matrices(T_4x4, R_4x4))
+
+        current_composition = self.__compute_target_composition(target_id, world2cam_4x4)
+
+        if current_composition is None:
+            return 9999
+        return ((composition[0] - current_composition[0])**2 + (composition[1] - current_composition[1])**2)**0.5

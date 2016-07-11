@@ -131,7 +131,7 @@ class CONTROLLER(object):
                         continue
 
                     if self.__current_compositions[target_id] is None:
-                        print "CONTROLLER: target", target_id, "is behind the camera, this should be handled beforehand"
+                        print "CONTROLLER: target", target_id, "is behind the camera, this should be handled beforehand already"
                         continue
 
                     errors_u.append(self.__target_compositions[target_id][0] - self.__current_compositions[target_id][0])
