@@ -71,7 +71,7 @@ class BEBOP_GCS(object):
         self.__pub_hover_positions = rospy.Publisher('fleye/debug/main_hover_positions', PointCloud, queue_size=1)
 
         # MAIN LOOP
-        rospy.Timer(rospy.Duration(1./GCS_LOOP_FREQUENCY), self.main_routine)
+        rospy.Timer(rospy.Duration(1./GCS_LOOP_FREQUENCY), self.safe_main_routine)
 
     def overtake_callback(self, data):
         self.__is_overtaken = data.data
@@ -101,6 +101,12 @@ class BEBOP_GCS(object):
             self.pub_pano.publish("grey")
             self.pub_orbit.publish("grey")
             self.pub_zigzag.publish("grey")
+
+    def safe_main_routine(self, event):
+        try:
+            self.main_routine(event)
+        except Exception as e:
+            print e
 
     def __best_hover_position(self):
         # if self.__planner.get_hover_position() is None:
@@ -339,13 +345,13 @@ class BEBOP_GCS(object):
                                                 self.__orb.get_velocity(),
                                                 self.__target_manager.get_target_compositions(self.__user.get_composed_targets()),
                                                 pan, tilt)
-
             # PLANNER: check orbit stage
             if self.__planner.is_orbit_current_waypoint_reached(self.__orb.get_position(),
                                                                 self.__user.get_compositions()[self.__planner.get_target().get_id()],
                                                                 self.__target_manager.get_target_composition(self.__planner.get_target().get_id())):
                 self.shoot()
                 self.__planner.update_orbit_waypoint()
+
             if self.__planner.is_orbit_done():
                 self.__planner.reset_orbit()
                 self.__stage = STAGE.stage_idle

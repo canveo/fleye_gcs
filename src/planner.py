@@ -59,12 +59,15 @@ class PLANNER(object):
         return self.__hover_position
 
     def update_hover_position(self, position, offset_direction):
-        hover_position_offset_1x3 = project_from_to(np.array(self.__hover_position) - np.array(position),
-                                                    np.array(offset_direction))
-
-        self.__hover_position[0] += 0 if math.isnan(hover_position_offset_1x3[0]) or np.dot(np.array(self.__hover_position) - np.array(position), np.array(offset_direction)) < 0 else hover_position_offset_1x3[0]
-        self.__hover_position[1] += 0 if math.isnan(hover_position_offset_1x3[1]) or np.dot(np.array(self.__hover_position) - np.array(position), np.array(offset_direction)) < 0 else hover_position_offset_1x3[1]
-        self.__hover_position[2] += 0 if math.isnan(hover_position_offset_1x3[2]) or np.dot(np.array(self.__hover_position) - np.array(position), np.array(offset_direction)) < 0 else hover_position_offset_1x3[2]
+        self.__hover_position[0] = position[0] + offset_direction[0]
+        self.__hover_position[1] = position[1] + offset_direction[1]
+        self.__hover_position[2] = position[2] + offset_direction[2]
+        # hover_position_offset_1x3 = project_from_to(np.array(self.__hover_position) - np.array(position),
+        #                                             np.array(offset_direction))
+        #
+        # self.__hover_position[0] += 0 if math.isnan(hover_position_offset_1x3[0]) or np.dot(np.array(self.__hover_position) - np.array(position), np.array(offset_direction)) < 0 else hover_position_offset_1x3[0]
+        # self.__hover_position[1] += 0 if math.isnan(hover_position_offset_1x3[1]) or np.dot(np.array(self.__hover_position) - np.array(position), np.array(offset_direction)) < 0 else hover_position_offset_1x3[1]
+        # self.__hover_position[2] += 0 if math.isnan(hover_position_offset_1x3[2]) or np.dot(np.array(self.__hover_position) - np.array(position), np.array(offset_direction)) < 0 else hover_position_offset_1x3[2]
 
     # --------------------------------------------- RESTORE
     def plan_restore(self, position, orientation, compositions):
@@ -158,7 +161,7 @@ class PLANNER(object):
         self.__waypoints = []
         for row in range(-number_of_rows_each_side, number_of_rows_each_side + 1):
             for col in range(-number_of_columns_each_side, number_of_columns_each_side + 1):
-                if col % 2  == number_of_columns_each_side % 2:
+                if row % 2  == number_of_rows_each_side % 2:
                     self.__waypoints.append(waypoints_matrix[(row, col)])
                 else:
                     self.__waypoints.append(waypoints_matrix[(row, -col)])
@@ -221,7 +224,7 @@ class PLANNER(object):
         self.__waypoints = []
         for i in range(number_of_shots):
             waypoint_1x3 = rotate(np.array(self.__start_position).T, i * 2 * math.pi / number_of_shots, (0,1,0), np.array(self.__target.get_center()).T)
-            self.__waypoints.append([waypoint_1x3[0], waypoint_1x3[1]])
+            self.__waypoints.append([waypoint_1x3[0], waypoint_1x3[1], waypoint_1x3[2]])
 
         self.__waypoint_count = 0
 
