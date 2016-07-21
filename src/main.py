@@ -641,6 +641,10 @@ class BEBOP_GCS(object):
                                                           self.__orb.get_header(),
                                                           self.__orb.get_world2cam_as_matrix(),
                                                           self.__orb.get_pcl_world())
+            if not new_target.is_valid():
+                print "MAIN: too few features to construct a target"
+                return
+
             new_target_composition = self.__target_manager.get_target_composition(new_target.get_id())
             # self.__user.set_target_composition(new_target.get_id(), new_target_composition[0], new_target_composition[1])
             self.__user.set_target_composition(new_target.get_id(), None)   # select without composing

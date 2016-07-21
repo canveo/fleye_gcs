@@ -31,6 +31,11 @@ class Target(object):
                 selected_mappoints_cam.append(pcl_world.points[i])
                 selected_keypoints.append((pcl_world.channels[0].values[i], pcl_world.channels[1].values[i]))
 
+        if len(selected_keypoints) < 5:
+            self.__is_valid = False
+            return
+        self.__is_valid = True
+
         # weight depend on distance between the keypoint and the bb center
         weights = map(lambda kp: ((x+w/2. - kp[0]) ** 2 + (y+h/2. - kp[1])**2) **0.5, selected_keypoints)
         # print "weights are ", weights
@@ -70,6 +75,9 @@ class Target(object):
     def get_radius(self):
         return self.__radius
 
+    def is_valid(self):
+        return self.__is_valid
+
 class TARGET_MANAGER(object):
     def __init__(self):
         # all targets, including cancelled ones
@@ -84,6 +92,11 @@ class TARGET_MANAGER(object):
 
     def add_target(self, x, y, w, h, header, world2cam_4x4, pcl_world):
         target = Target(x, y, w, h, header, world2cam_4x4, pcl_world)
+
+        # could be an invalid target (with very few features)
+        if not target.is_valid():
+            return target
+
         self.__targets[target.get_id()] = target
         self.__compositions[target.get_id()] = self.__compute_target_composition(target.get_id(), world2cam_4x4)
         return target
