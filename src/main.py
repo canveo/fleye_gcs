@@ -33,7 +33,7 @@ class BEBOP_GCS(object):
     def __init__(self):
         rospy.init_node('fleye_gcs', anonymous=True)
 
-        rospy.Subscriber('fleye/gesture', Float32MultiArray, self.gesture_callback)
+        rospy.Subscriber('fleye/gesture', Float32MultiArray, self.safe_gesture_callback)
         self.pub_tl = rospy.Publisher('fleye/takeoff_land', String, queue_size=1)
         self.pub_pano = rospy.Publisher('fleye/pano', String, queue_size=1)
         self.pub_orbit = rospy.Publisher('fleye/orbit', String, queue_size=1)
@@ -78,8 +78,11 @@ class BEBOP_GCS(object):
 
     def pub_interface_look(self):
         if self.__stage is STAGE.stage_idle:
-            self.pub_pano.publish("white")
-            self.pub_orbit.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
+            # self.pub_pano.publish("white")
+            # self.pub_orbit.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
+            # self.pub_zigzag.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
+            self.pub_pano.publish("grey")
+            self.pub_orbit.publish("grey")
             self.pub_zigzag.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
         elif self.__stage is STAGE.stage_pano:
             self.pub_pano.publish("yellow")
@@ -493,6 +496,12 @@ class BEBOP_GCS(object):
         self.__pub_snap_shot_info.publish(pose_composition_msg)
         print "MAIN: shoot"
 
+    def safe_gesture_callback(self, data):
+        try:
+            self.gesture_callback(data)
+        except Exception as e:
+            print e
+
     def gesture_callback(self, data):
         if len(data.data) is 1:
             # takeoff
@@ -557,7 +566,7 @@ class BEBOP_GCS(object):
             # zigzag
             elif int(data.data[0]) is ord('Z'):
                 target_id = self.__user.get_composed_targets()[0]
-                self.__planner.plan_zigzag(self.__target_manager.get_target(target_id))
+                self.__planner.plan_zigzag(self.__target_manager.get_target(target_id), number_of_rows_each_side=0)
                 self.__stage = STAGE.stage_zigzag
                 # self.pub_orbit.publish("yellow")
                 print "MAIN: start zigzaging"

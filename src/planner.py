@@ -146,7 +146,19 @@ class PLANNER(object):
     def plan_zigzag(self, target, number_of_rows_each_side=1, number_of_columns_each_side = 2,
                     angle_interval_between_rows = 20. * math.pi / 180., angle_interval_between_columns =20. * math.pi / 180.):  #TODO: number_of_rows
         self.__target = target
-        self.__start_position = self.__hover_position               #TODO: self.__hover_position is not None
+
+        # safety check
+        distance_safety_check = distance_between(np.array(self.__target.get_center()), np.array(self.__hover_position))
+        if LOWER_BOUND_distance <= distance_safety_check <= UPPER_BOUND_distance:
+            self.__start_position = self.__hover_position
+        else:
+            target_to_hover = np.array(self.__hover_position) - np.array(self.__target.get_center())
+            target_to_hover_unit = target_to_hover / length_of_vector(target_to_hover)
+            target_to_start = target_to_hover_unit * (LOWER_BOUND_distance if distance_safety_check < LOWER_BOUND_distance else UPPER_BOUND_distance)
+            start = np.array(self.__target.get_center()) + target_to_start
+            self.__start_position = [start[0], start[1], start[2]]
+
+        # self.__start_position = self.__hover_position               #TODO: self.__hover_position is not None
         self.__distance_to_target = distance_between(np.array(self.__target.get_center()), np.array(self.__start_position))
 
         waypoints_matrix = dict()

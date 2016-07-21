@@ -91,3 +91,6 @@ ERROR_TOLERANCE_Composition_tilt_factor = 3
 ERROR_TOLERANCE_hover_factor = 1.5
 
 ERROR_TOLERANCE_lazy_factor_px_per_meter = 30.
+
+LOWER_BOUND_distance = 1.5
+UPPER_BOUND_distance = 2.0
