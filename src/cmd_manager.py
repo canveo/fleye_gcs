@@ -26,7 +26,8 @@ class CMD_MANAGER(object):
     def __init__(self):
         self.__pubTakeoff = rospy.Publisher('bebop/takeoff', Empty, queue_size=1)
         self.__pubLand = rospy.Publisher('bebop/land', Empty, queue_size=1)
-        self.__pubCmdVel = rospy.Publisher('bebop/cmd_vel', Twist, queue_size=5)
+        # self.__pubCmdVel = rospy.Publisher('bebop/cmd_vel', Twist, queue_size=5)
+        self.__pubCmdVel = rospy.Publisher('bebop/auto_cmd_vel', Twist, queue_size=5)
         self.__pubCameraControl = rospy.Publisher('bebop/camera_control', Twist, queue_size=5)
 
     def send_takeoff(self):

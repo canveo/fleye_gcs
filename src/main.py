@@ -5,8 +5,8 @@ import roslib
 import rospy
 
 from std_msgs.msg import Header, Empty, Float32, Float32MultiArray, String, Int32, Bool
-from sensor_msgs.msg import Image, CompressedImage, ChannelFloat32, PointCloud
-from geometry_msgs.msg import Pose, PoseStamped, Point32                                     #http://docs.ros.org/api/geometry_msgs/html/index-msg.html
+from sensor_msgs.msg import Image, CompressedImage, ChannelFloat32, PointCloud, Joy
+from geometry_msgs.msg import Pose, PoseStamped, Point32, Twist                                     #http://docs.ros.org/api/geometry_msgs/html/index-msg.html
 
 from tf import transformations
 
@@ -66,12 +66,32 @@ class BEBOP_GCS(object):
 
         # debug
         rospy.Subscriber('fleye/debug/keyboard_overtake', Bool, self.overtake_callback)
+        rospy.Subscriber('/joy', Joy, self.ps3_overtake_callback)
+        rospy.Subscriber('bebop/auto_cmd_vel', Twist, self.auto_cmd_vel_callback)
+        rospy.Subscriber('bebop/safety_cmd_vel', Twist, self.safety_cmd_vel_callback)
+        self.__last_safety_cmd_vel_timestamp = None
+        self.__pub_cmdvel = rospy.Publisher('/bebop/cmd_vel', Twist, queue_size=5)
         self.__is_overtaken = False
 
         self.__pub_hover_positions = rospy.Publisher('fleye/debug/main_hover_positions', PointCloud, queue_size=1)
 
         # MAIN LOOP
         rospy.Timer(rospy.Duration(1./GCS_LOOP_FREQUENCY), self.safe_main_routine)
+
+    def auto_cmd_vel_callback(self, data):
+        if not self.__is_overtaken:
+            self.__pub_cmdvel.publish(data)
+
+    def safety_cmd_vel_callback(self, data):
+        self.__last_safety_cmd_vel_timestamp = rospy.Time.now()
+        if self.__is_overtaken:
+            self.__pub_cmdvel.publish(data)
+
+    def ps3_overtake_callback(self,data):
+        if abs(data.axes[0]) > 0.01 or abs(data.axes[1]) > 0.01 or abs(data.axes[2]) > 0.01 or abs(data.axes[3]) > 0.01:
+            self.__is_overtaken = True
+        elif data.buttons[16] is 1:
+            self.__is_overtaken = False
 
     def overtake_callback(self, data):
         self.__is_overtaken = data.data
@@ -189,7 +209,11 @@ class BEBOP_GCS(object):
         self.__planner.pub_debug_info()
         self.__controller.pub_debug_info()
 
+        # TODO: keyboard is not working
         if self.__is_overtaken:
+            if rospy.Time.now() - self.__last_safety_cmd_vel_timestamp < rospy.Duration(secs=0.5):
+                fake_safety_twist = Twist
+                self.__pub_cmdvel.publish(Twist)
             print "MAIN: keyboard control", rospy.Time.now().to_time()
             return
 
