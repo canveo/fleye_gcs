@@ -211,9 +211,10 @@ class BEBOP_GCS(object):
 
         # TODO: keyboard is not working
         if self.__is_overtaken:
-            if rospy.Time.now() - self.__last_safety_cmd_vel_timestamp < rospy.Duration(secs=0.5):
-                fake_safety_twist = Twist
-                self.__pub_cmdvel.publish(Twist)
+            if rospy.Time.now() - self.__last_safety_cmd_vel_timestamp > rospy.Duration(secs=0.5):
+                fake_safety_twist = Twist()
+                self.__pub_cmdvel.publish(fake_safety_twist)
+                print "!!!Sending zero velocity CMD!!!"
             print "MAIN: keyboard control", rospy.Time.now().to_time()
             return
 
@@ -621,7 +622,7 @@ class BEBOP_GCS(object):
             # move around
             if int(data.data[0]) is ord('i'):
                 print "MAIN: user move right", data.data[1], "move down", data.data[2]
-                self.__user.set_intention_from_user_control(self.__orb.get_cam2world_as_matrix(), data.data[1], data.data[2], 0, 0, 0)
+                self.__user.set_intention_from_user_control(self.__orb.get_cam2world_as_matrix(), -data.data[1], -data.data[2], 0, 0, 0)
 
             # pan tilt
             elif int(data.data[0]) is ord('I'):

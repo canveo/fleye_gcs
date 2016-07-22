@@ -65,14 +65,14 @@ ERROR_TOLERANCE_Control_pan = 5 * math.pi / 180.    # radian
 ERROR_TOLERANCE_Control_tilt = 5 * math.pi / 180.   # radian
 ERROR_TOLERANCE_Control_yaw = 15. * math.pi / 180.   # radian
 
-ERROR_TOLERANCE_Control_xyz = 0.2                           # unit in orb
+ERROR_TOLERANCE_Control_xyz = 0.25                           # unit in orb
 ERROR_TOLERANCE_Control_x = ERROR_TOLERANCE_Control_xyz     # unit in orb
 ERROR_TOLERANCE_Control_y = ERROR_TOLERANCE_Control_xyz     # unit in orb
 ERROR_TOLERANCE_Control_z = 0#ERROR_TOLERANCE_Control_xyz  / 10.   # unit in orb
 
 # control gain for reflexxes
-GAIN_R_left = 1./30.
-GAIN_R_forward = 1./30.
+GAIN_R_left = 1./45.    #was 1./30.
+GAIN_R_forward = 1./45.
 GAIN_R_up = 1./20.
 
 GCS_LOOP_FREQUENCY = 30.
@@ -92,5 +92,7 @@ ERROR_TOLERANCE_hover_factor = 1.5
 
 ERROR_TOLERANCE_lazy_factor_px_per_meter = 30.
 
-LOWER_BOUND_distance = 1.5
-UPPER_BOUND_distance = 2.0
+LOWER_BOUND_distance = 2.0
+UPPER_BOUND_distance = 2.7
+
+#TODO: disable multiple, go back after orbit, clear ui after landed
