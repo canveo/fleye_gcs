@@ -90,6 +90,7 @@ class BEBOP_GCS(object):
     def ps3_overtake_callback(self,data):
         if abs(data.axes[0]) > 0.01 or abs(data.axes[1]) > 0.01 or abs(data.axes[2]) > 0.01 or abs(data.axes[3]) > 0.01:
             self.__is_overtaken = True
+            self.__planner.set_hover_position(None)
         elif data.buttons[16] is 1:
             self.__is_overtaken = False
 
@@ -268,13 +269,13 @@ class BEBOP_GCS(object):
                                                 pan, tilt)
 
             # PLANNER: set hover position
-            if len(self.__user.get_composed_targets()) is 0:
-                if self.__planner.get_hover_position() is None:
-                    self.__planner.set_hover_position(self.__orb.get_position())
-            else:
-                self.__planner.set_hover_position(self.__best_hover_position())
-            # if self.__planner.get_hover_position() is None:
-            #     self.__planner.set_hover_position(self.__orb.get_position())
+            # if len(self.__user.get_composed_targets()) is 0:
+            #     if self.__planner.get_hover_position() is None:
+            #         self.__planner.set_hover_position(self.__orb.get_position())
+            # else:
+            #     self.__planner.set_hover_position(self.__best_hover_position())
+            if self.__planner.get_hover_position() is None:
+                self.__planner.set_hover_position(self.__orb.get_position())
             if self.__user.get_intended_position_offset() is not None:
                 self.__planner.update_hover_position(self.__orb.get_position(),
                                                      self.__user.get_intended_position_offset())
@@ -563,6 +564,7 @@ class BEBOP_GCS(object):
             elif int(data.data[0]) is ord('Q'):
                 if self.__stage is STAGE.stage_idle:
                     self.__user.reset_intention(self.__orb.get_orientation())
+                    self.__planner.set_hover_position(self.__orb.get_position())
 
             # pano
             elif int(data.data[0]) is ord('P'):

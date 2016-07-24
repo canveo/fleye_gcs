@@ -43,14 +43,14 @@
 
   <build_depend>fleye_controller</build_depend>
   <build_depend>bebop_msgs</build_depend>
-  <build_depend>tld_msgs</build_depend>
+  <!-- <build_depend>tld_msgs</build_depend> -->
   <build_depend>roscpp</build_depend>
   <build_depend>rospy</build_depend>
   <build_depend>std_msgs</build_depend>
 
   <run_depend>fleye_controller</run_depend>
   <run_depend>bebop_msgs</run_depend>
-  <run_depend>tld_msgs</run_depend>
+  <!-- <run_depend>tld_msgs</run_depend> -->
   <run_depend>roscpp</run_depend>
   <run_depend>rospy</run_depend>
   <run_depend>std_msgs</run_depend>

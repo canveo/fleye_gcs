@@ -52,8 +52,9 @@ GAIN_User_tilt_px_per_unit = IMAGE_HEIGHT / 10.
 
 GAIN_User_swipe = 1
 
-GAIN_P_pan_radian_per_px = 0.01 * math.pi / 180.
-GAIN_P_tilt_radian_per_px = 0.01 * math.pi / 180.
+GAIN_P_pan_tilt_radian_per_px = 0.01 * math.pi / 180.
+GAIN_P_pan_radian_per_px = GAIN_P_pan_tilt_radian_per_px
+GAIN_P_tilt_radian_per_px = GAIN_P_pan_tilt_radian_per_px
 
 GAIN_P_pan_radian_per_radian = 0.1
 GAIN_P_tilt_radian_per_radian = 0.1
@@ -65,14 +66,14 @@ ERROR_TOLERANCE_Control_pan = 5 * math.pi / 180.    # radian
 ERROR_TOLERANCE_Control_tilt = 5 * math.pi / 180.   # radian
 ERROR_TOLERANCE_Control_yaw = 15. * math.pi / 180.   # radian
 
-ERROR_TOLERANCE_Control_xyz = 0.25                           # unit in orb
+ERROR_TOLERANCE_Control_xyz = 0.2                           # unit in orb
 ERROR_TOLERANCE_Control_x = ERROR_TOLERANCE_Control_xyz     # unit in orb
 ERROR_TOLERANCE_Control_y = ERROR_TOLERANCE_Control_xyz     # unit in orb
 ERROR_TOLERANCE_Control_z = 0#ERROR_TOLERANCE_Control_xyz  / 10.   # unit in orb
 
 # control gain for reflexxes
-GAIN_R_left = 1./45.    #was 1./30.
-GAIN_R_forward = 1./45.
+GAIN_R_left = 1./35.    #was 1./30.
+GAIN_R_forward = 1./35.
 GAIN_R_up = 1./20.
 
 GCS_LOOP_FREQUENCY = 30.
@@ -84,7 +85,7 @@ ORB_Q_std = 0.1
 CONSTANT_takeoff_land_time = 3  # secs
 
 ERROR_TOLERANCE_distance_ratio_to_target = 0.2
-ERROR_TOLERANCE_angle_difference_wrt_target = 7. * math.pi / 180. # radian
+ERROR_TOLERANCE_angle_difference_wrt_target = 5. * math.pi / 180. # radian
 ERROR_TOLERANCE_Composition_pan_factor = 3
 ERROR_TOLERANCE_Composition_tilt_factor = 3
 
@@ -94,5 +95,7 @@ ERROR_TOLERANCE_lazy_factor_px_per_meter = 30.
 
 LOWER_BOUND_distance = 2.0
 UPPER_BOUND_distance = 2.7
+
+DELAY_predition_in_sec = 0.5
 
 #TODO: disable multiple, go back after orbit, clear ui after landed

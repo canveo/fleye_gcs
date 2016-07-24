@@ -153,8 +153,11 @@ class ORB_SLAM_MANAGER(object):
         #     self.__position_velocity_filter.P *= 0.2
         # else:
         z = np.array([data.cam2world.translation.x, data.cam2world.translation.y, data.cam2world.translation.z])
+
         self.__position_velocity_filter.predict()
         self.__position_velocity_filter.update(z)
+
+
 
         # self.__last_callback_time = rospy.Time.now()
 
@@ -220,7 +223,9 @@ class ORB_SLAM_MANAGER(object):
 
     def get_position(self):
         self.__lock.acquire()
-        position = [self.__position_velocity_filter.x[0], self.__position_velocity_filter.x[2], self.__position_velocity_filter.x[4]]
+        position = [self.__position_velocity_filter.x[0] + self.__position_velocity_filter.x[1] * DELAY_predition_in_sec,
+                    self.__position_velocity_filter.x[2] + self.__position_velocity_filter.x[3] * DELAY_predition_in_sec,
+                    self.__position_velocity_filter.x[4] + self.__position_velocity_filter.x[5] * DELAY_predition_in_sec]
         self.__lock.release()
         return position
 
