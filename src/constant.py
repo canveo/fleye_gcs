@@ -72,8 +72,8 @@ ERROR_TOLERANCE_Control_y = ERROR_TOLERANCE_Control_xyz     # unit in orb
 ERROR_TOLERANCE_Control_z = 0#ERROR_TOLERANCE_Control_xyz  / 10.   # unit in orb
 
 # control gain for reflexxes
-GAIN_R_left = 1./35.    #was 1./30.
-GAIN_R_forward = 1./35.
+GAIN_R_left = 1./50.    #was 1./30.
+GAIN_R_forward = 1./50.
 GAIN_R_up = 1./20.
 
 GCS_LOOP_FREQUENCY = 30.

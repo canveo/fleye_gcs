@@ -118,6 +118,9 @@ class TARGET_MANAGER(object):
         self.__lock.release()
         return compositions
 
+    def get_all_compositions(self):
+        return self.__compositions
+
     # input: a list of target id
     # output: PointCloud message
     def update_compositions_and_publish_targets_as_pcl(self, header, world2cam_4x4, compositions):#compositions include both composed_targets and none_composed_targets

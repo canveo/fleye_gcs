@@ -304,7 +304,7 @@ class BEBOP_GCS(object):
             self.__controller.set_current_state(self.__orb.get_position(),
                                                 self.__orb.get_orientation(),
                                                 self.__orb.get_velocity(),
-                                                self.__target_manager.get_target_compositions(self.__user.get_composed_targets()),
+                                                self.__target_manager.get_all_compositions(),
                                                 pan, tilt)
 
             # PLANNER: check restore stage
