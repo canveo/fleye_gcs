@@ -41,6 +41,9 @@ class ORB_SLAM_MANAGER(object):
         self.__pcl_world = None
         self.__pcl_cam = None
 
+        # average distance between pcl to camera in camera frame
+        self.__average_depth = None
+
         self.__last_header = None
         self.__last_cam2world = None
 
@@ -142,6 +145,17 @@ class ORB_SLAM_MANAGER(object):
             keypoints_msg.data.append(self.__pcl_cam.channels[0].values[i])
             keypoints_msg.data.append(self.__pcl_cam.channels[1].values[i])
 
+        # if len(self.__pcl_cam.points) > 100:
+        #     keypoints_xy = []
+        #     keypoints_depth = []
+        #     for i in range(len(self.__pcl_cam.points)):
+        #         keypoints_xy.append((self.__pcl_cam.channels[0].values[i], self.__pcl_cam.channels[1].values[i]))
+        #         keypoints_depth.append(self.__pcl_cam.channels[2].values[i])
+        #     weights = map(lambda kp: ((IMAGE_WIDTH/2. - kp[0]) ** 2 + (IMAGE_HEIGHT/2. - kp[1])**2) **0.5, keypoints_xy)
+        #     self.__average_depth = np.average(keypoints_depth, weights=weights)
+        # else:
+        #     self.__average_depth = None
+
         self.__pub_keypoints.publish(keypoints_msg)
         self.__pub_pcl_world.publish(self.__pcl_world)
         self.__pub_pcl_cam.publish(self.__pcl_cam)
@@ -213,6 +227,9 @@ class ORB_SLAM_MANAGER(object):
         pcl_cam = self.__pcl_cam
         self.__lock.release()
         return pcl_cam
+
+    def get_average_depth(self):
+        return self.__average_depth
 
     def get_last_header_and_cam2world(self):
         self.__lock.acquire()

@@ -66,7 +66,7 @@ ERROR_TOLERANCE_Control_pan = 5 * math.pi / 180.    # radian
 ERROR_TOLERANCE_Control_tilt = 5 * math.pi / 180.   # radian
 ERROR_TOLERANCE_Control_yaw = 15. * math.pi / 180.   # radian
 
-ERROR_TOLERANCE_Control_xyz = 0.2                           # unit in orb
+ERROR_TOLERANCE_Control_xyz = 0.1                           # unit in orb %%%%%%%%%%%%%%%%%%%%%%%%% was 0.2
 ERROR_TOLERANCE_Control_x = ERROR_TOLERANCE_Control_xyz     # unit in orb
 ERROR_TOLERANCE_Control_y = ERROR_TOLERANCE_Control_xyz     # unit in orb
 ERROR_TOLERANCE_Control_z = 0#ERROR_TOLERANCE_Control_xyz  / 10.   # unit in orb
@@ -84,18 +84,22 @@ ORB_Q_std = 0.1
 
 CONSTANT_takeoff_land_time = 3  # secs
 
-ERROR_TOLERANCE_distance_ratio_to_target = 0.2
-ERROR_TOLERANCE_angle_difference_wrt_target = 5. * math.pi / 180. # radian
-ERROR_TOLERANCE_Composition_pan_factor = 3
-ERROR_TOLERANCE_Composition_tilt_factor = 3
+ERROR_TOLERANCE_distance_ratio_to_target = 0.25
+ERROR_TOLERANCE_angle_difference_wrt_target = 7. * math.pi / 180. # radian %%%%%%%%%%%%%%%%%%%%%% was 5
+ERROR_TOLERANCE_Composition_pan_factor = 5
+ERROR_TOLERANCE_Composition_tilt_factor = 5
 
 ERROR_TOLERANCE_hover_factor = 1.5
 
 ERROR_TOLERANCE_lazy_factor_px_per_meter = 30.
 
-LOWER_BOUND_distance = 2.0
-UPPER_BOUND_distance = 2.7
+LOWER_BOUND_distance = 0.1
+UPPER_BOUND_distance = 10.0
 
 DELAY_predition_in_sec = 0.5
 
-#TODO: disable multiple, go back after orbit, clear ui after landed
+NUM_NODES_RRT_STAR = 5000
+ALPHA = 0.5
+COLLISION_PENALTY = 100
+STEP_LENGTH = 0.01
+MAX_STEP_NUMBER = 50

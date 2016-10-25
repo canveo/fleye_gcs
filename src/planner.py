@@ -113,7 +113,12 @@ class PLANNER(object):
         self.__pano_waypoints = []
         for i in range(number_of_shots):
             self.__pano_waypoints.append([orientation[0] + i * 2 * math.pi / number_of_shots, orientation[1]])
+
+        self.__pano_waypoints.append(self.__start_orientation)
         self.__pano_waypoint_count = 0
+
+    def is_pano_no_more_shots(self):
+        return self.__pano_waypoint_count >= len(self.__pano_waypoints) - 1
 
     def is_pano_done(self):
         return self.__pano_waypoint_count >= len(self.__pano_waypoints)
@@ -131,8 +136,9 @@ class PLANNER(object):
         # check orientation
         if abs(rad_from_to(orientation[0], self.__pano_waypoints[self.__pano_waypoint_count][0])) > ERROR_TOLERANCE_Control_pan * ERROR_TOLERANCE_hover_factor:
             return False
-        if abs(rad_from_to(orientation[1], self.__pano_waypoints[self.__pano_waypoint_count][1])) > ERROR_TOLERANCE_Control_tilt * ERROR_TOLERANCE_hover_factor:
-            return False
+        #skip tilt for video making
+        # if abs(rad_from_to(orientation[1], self.__pano_waypoints[self.__pano_waypoint_count][1])) > ERROR_TOLERANCE_Control_tilt * ERROR_TOLERANCE_hover_factor:
+        #     return False
 
         return True
 
@@ -143,8 +149,8 @@ class PLANNER(object):
         self.__pano_waypoint_count += 1
 
     # --------------------------------------------- ZIGZAG
-    def plan_zigzag(self, target, number_of_rows_each_side=1, number_of_columns_each_side = 2,
-                    angle_interval_between_rows = 20. * math.pi / 180., angle_interval_between_columns =20. * math.pi / 180.):  #TODO: number_of_rows
+    def plan_zigzag(self, target, number_of_rows_each_side=1, number_of_columns_each_side = 1,
+                    angle_interval_between_rows = 30. * math.pi / 180., angle_interval_between_columns =45. * math.pi / 180.):  #TODO: number_of_rows
         self.__target = target
 
         # safety check
@@ -178,7 +184,12 @@ class PLANNER(object):
                 else:
                     self.__waypoints.append(waypoints_matrix[(row, -col)])
 
+        self.__waypoints.append(self.__start_position)
         self.__waypoint_count = 0
+
+
+    def is_zigzag_no_more_shots(self):
+        return self.__waypoint_count >= len(self.__waypoints) - 1
 
     def is_zigzag_done(self):
         return self.__waypoint_count >= len(self.__waypoints)
@@ -226,6 +237,10 @@ class PLANNER(object):
 
         return True
 
+    # # orientation: pan, tilt, roll
+    # def plan_zigzag_no_target(self, orientation, grid_size, number_of_rows_each_side=1, number_of_columns_each_side = 1):
+    #     pass
+    #
 
     # --------------------------------------------- ORBIT
     def plan_orbit(self, target, number_of_shots=8):
@@ -238,7 +253,11 @@ class PLANNER(object):
             waypoint_1x3 = rotate(np.array(self.__start_position).T, i * 2 * math.pi / number_of_shots, (0,1,0), np.array(self.__target.get_center()).T)
             self.__waypoints.append([waypoint_1x3[0], waypoint_1x3[1], waypoint_1x3[2]])
 
+        self.__waypoints.append(self.__start_position)
         self.__waypoint_count = 0
+
+    def is_orbit_no_more_shots(self):
+        return self.__waypoint_count >= len(self.__waypoints) - 1
 
     def is_orbit_done(self):
         return self.__waypoint_count >= len(self.__waypoints)

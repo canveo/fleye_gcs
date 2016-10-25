@@ -8,6 +8,8 @@ from std_msgs.msg import Header, Empty, Float32, Float32MultiArray, String, Int3
 from sensor_msgs.msg import Image, CompressedImage, ChannelFloat32, PointCloud, Joy
 from geometry_msgs.msg import Pose, PoseStamped, Point32, Twist                                     #http://docs.ros.org/api/geometry_msgs/html/index-msg.html
 
+from nav_msgs.msg import Path
+
 from tf import transformations
 
 # We need to use resource locking to handle synchronization between GUI thread and ROS topic callbacks
@@ -18,6 +20,8 @@ from target import Target
 
 from constant import *
 from vector import *
+
+
 
 import Queue
 
@@ -99,12 +103,13 @@ class BEBOP_GCS(object):
 
     def pub_interface_look(self):
         if self.__stage is STAGE.stage_idle:
-            # self.pub_pano.publish("white")
-            # self.pub_orbit.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
+            self.pub_pano.publish("white")
+            self.pub_orbit.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
             # self.pub_zigzag.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
-            self.pub_pano.publish("grey")
-            self.pub_orbit.publish("grey")
-            self.pub_zigzag.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
+            self.pub_zigzag.publish("white")
+            # self.pub_pano.publish("grey")
+            # self.pub_orbit.publish("grey")
+            # self.pub_zigzag.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
         elif self.__stage is STAGE.stage_pano:
             self.pub_pano.publish("yellow")
             self.pub_orbit.publish("grey")
@@ -269,16 +274,16 @@ class BEBOP_GCS(object):
                                                 pan, tilt)
 
             # PLANNER: set hover position
-            # if len(self.__user.get_composed_targets()) is 0:
-            #     if self.__planner.get_hover_position() is None:
-            #         self.__planner.set_hover_position(self.__orb.get_position())
-            # else:
-            #     self.__planner.set_hover_position(self.__best_hover_position())
-            if self.__planner.get_hover_position() is None:
-                self.__planner.set_hover_position(self.__orb.get_position())
-            if self.__user.get_intended_position_offset() is not None:
-                self.__planner.update_hover_position(self.__orb.get_position(),
-                                                     self.__user.get_intended_position_offset())
+            if len(self.__user.get_composed_targets()) is 0:
+                if self.__planner.get_hover_position() is None:
+                    self.__planner.set_hover_position(self.__orb.get_position())
+            else:
+                self.__planner.set_hover_position(self.__best_hover_position())
+            # if self.__planner.get_hover_position() is None:
+            #     self.__planner.set_hover_position(self.__orb.get_position())
+            # if self.__user.get_intended_position_offset() is not None:
+            #     self.__planner.update_hover_position(self.__orb.get_position(),
+            #                                          self.__user.get_intended_position_offset())
             # CONTROLLER: set target state
             target_image_position = self.__planner.get_hover_position()
             if self.__user.get_intended_position_offset() is not None:
@@ -342,7 +347,8 @@ class BEBOP_GCS(object):
 
             # PLANNER: check pano stage
             if self.__planner.is_pano_current_waypoint_reached(self.__orb.get_position(), self.__orb.get_orientation()):
-                self.shoot()
+                if not self.__planner.is_pano_no_more_shots():
+                    self.shoot()
                 self.__planner.update_pano_waypoint()
             if self.__planner.is_pano_done():
                 self.__planner.reset_pano()
@@ -378,7 +384,8 @@ class BEBOP_GCS(object):
             if self.__planner.is_orbit_current_waypoint_reached(self.__orb.get_position(),
                                                                 self.__user.get_compositions()[self.__planner.get_target().get_id()],
                                                                 self.__target_manager.get_target_composition(self.__planner.get_target().get_id())):
-                self.shoot()
+                if not self.__planner.is_orbit_no_more_shots():
+                    self.shoot()
                 self.__planner.update_orbit_waypoint()
 
             if self.__planner.is_orbit_done():
@@ -414,7 +421,8 @@ class BEBOP_GCS(object):
             if self.__planner.is_zigzag_current_waypoint_reached(self.__orb.get_position(),
                                                                  self.__user.get_compositions()[self.__planner.get_target().get_id()],
                                                                  self.__target_manager.get_target_composition(self.__planner.get_target().get_id())):
-                self.shoot()
+                if not self.__planner.is_zigzag_no_more_shots():
+                    self.shoot()
                 self.__planner.update_zigzag_waypoint()
             if self.__planner.is_zigzag_done():
                 self.__planner.reset_zigzag()
@@ -593,7 +601,7 @@ class BEBOP_GCS(object):
             # zigzag
             elif int(data.data[0]) is ord('Z'):
                 target_id = self.__user.get_composed_targets()[0]
-                self.__planner.plan_zigzag(self.__target_manager.get_target(target_id), number_of_rows_each_side=0)
+                self.__planner.plan_zigzag(self.__target_manager.get_target(target_id))
                 self.__stage = STAGE.stage_zigzag
                 # self.pub_orbit.publish("yellow")
                 print "MAIN: start zigzaging"
@@ -934,7 +942,7 @@ class BEBOP_GCS(object):
     #     return (self.u - self.target_u) ** 2 + (self.v - self.target_v) ** 2 <= 1000 * tolerance_ratio * tolerance_ratio
 
 
-
-if __name__ == '__main__':
+i
+f __name__ == '__main__':
     gcs = BEBOP_GCS()
     rospy.spin()
