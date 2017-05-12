@@ -243,14 +243,14 @@ class PLANNER(object):
     #
 
     # --------------------------------------------- ORBIT
-    def plan_orbit(self, target, number_of_shots=8):
+    def plan_orbit(self, target, number_of_shots=6):
         self.__target = target
         self.__start_position = self.__hover_position               #TODO: self.__hover_position is not None
         self.__distance_to_target = distance_between(np.array(self.__target.get_center()), np.array(self.__start_position))
 
         self.__waypoints = []
         for i in range(number_of_shots):
-            waypoint_1x3 = rotate(np.array(self.__start_position).T, i * 2 * math.pi / number_of_shots, (0,1,0), np.array(self.__target.get_center()).T)
+            waypoint_1x3 = rotate(np.array(self.__start_position).T, i * 2 * math.pi / number_of_shots, (0,-1,0), np.array(self.__target.get_center()).T)
             self.__waypoints.append([waypoint_1x3[0], waypoint_1x3[1], waypoint_1x3[2]])
 
         self.__waypoints.append(self.__start_position)

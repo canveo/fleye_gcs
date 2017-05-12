@@ -942,7 +942,6 @@ class BEBOP_GCS(object):
     #     return (self.u - self.target_u) ** 2 + (self.v - self.target_v) ** 2 <= 1000 * tolerance_ratio * tolerance_ratio
 
 
-i
-f __name__ == '__main__':
+if __name__ == '__main__':
     gcs = BEBOP_GCS()
     rospy.spin()
