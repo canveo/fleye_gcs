@@ -49,6 +49,7 @@ class IMU_MANAGER(object):
         # self.__pub_pan = rospy.Publisher('fleye/pan', Float32, queue_size=1)
         self.__tilt = 0
         self.__pan = 0
+        self.__roll = 0
         self.__is_tilt_pan_set_manually = False
         self.__tilt_pan_lock = Lock()
 
@@ -97,6 +98,20 @@ class IMU_MANAGER(object):
         pan = self.__pan
         self.__tilt_pan_lock.release()
         return tilt, pan
+
+    # --------------------------------------------- roll
+
+    def set_roll(self, roll):
+        self.__tilt_pan_lock.acquire()
+        self.__roll = roll
+        self.__tilt_pan_lock.release()
+
+
+    def get_roll(self):
+        self.__tilt_pan_lock.acquire()
+        roll = self.__roll
+        self.__tilt_pan_lock.release()
+        return roll
 
     # --------------------------------------------- height
     def height_callback(self, data):

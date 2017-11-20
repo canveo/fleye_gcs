@@ -4,6 +4,9 @@ import roslib
 
 import rospy
 
+import cv2
+from cv_bridge import CvBridge, CvBridgeError
+
 from std_msgs.msg import Header, Empty, Float32, Float32MultiArray, String, Int32, Bool
 from sensor_msgs.msg import Image, CompressedImage, ChannelFloat32, PointCloud, Joy
 from geometry_msgs.msg import Pose, PoseStamped, Point32, Twist                                     #http://docs.ros.org/api/geometry_msgs/html/index-msg.html
@@ -15,13 +18,13 @@ from tf import transformations
 # We need to use resource locking to handle synchronization between GUI thread and ROS topic callbacks
 from threading import Lock
 
-import cmd_manager, imu_manager, angle, orb_slam_manager, user_intent_manager, target, controller, planner
+import cmd_manager, imu_manager, angle, orb_slam_manager, user_intent_manager, target, controller, planner, image_roller
 from target import Target
 
 from constant import *
 from vector import *
 
-
+from planner_two_compose import two_compose, rotation_to_minize_reprojection_error
 
 import Queue
 
@@ -37,6 +40,8 @@ class BEBOP_GCS(object):
     def __init__(self):
         rospy.init_node('fleye_gcs', anonymous=True)
 
+        self.bridge = CvBridge()
+
         rospy.Subscriber('fleye/gesture', Float32MultiArray, self.safe_gesture_callback)
         self.pub_tl = rospy.Publisher('fleye/takeoff_land', String, queue_size=1)
         self.pub_pano = rospy.Publisher('fleye/pano', String, queue_size=1)
@@ -51,6 +56,27 @@ class BEBOP_GCS(object):
         self.__pub_snap_shot = rospy.Publisher('fleye/snap_shot', CompressedImage, queue_size=1)
         self.__pub_snap_shot_info = rospy.Publisher('fleye/snap_shot_info', Float32MultiArray, queue_size=1)
 
+        # uncompressed image for roll
+        rospy.Subscriber('/bebop/image_raw', Image, self.image_callback, queue_size=1)
+        self.__pub_rolled_image = rospy.Publisher('bebop/rolled_image_raw', Image, queue_size=1)
+        # self.__pub_snap_shot_on_board = rospy.Publisher('bebop/snapshot', Empty, queue_size=1)
+        self.__image_buffer = None
+        self.__image_buffer_lock = Lock()
+        self.__pub_targets = rospy.Publisher('fleye/targets2', PointCloud, queue_size=1)
+
+        rospy.Subscriber('fleye/compose', Float32MultiArray, self.compose_callback)
+        self.__q_1 = None          # [x,y,z]
+        self.__q_2 = None          # [x,y,z]
+        self.__epsilon_1 = None          # float32
+        self.__epsilon_2 = None          # float32
+        self.__t_0 = None                   # [x,y,z]
+        self.__p_1 = None                    # [u,v,1]
+        self.__p_2 = None                    # [u,v,1]
+
+        # self.__pub_snap_shot = rospy.Publisher('fleye/snap_shot', CompressedImage, queue_size=1)
+        # self.__pub_snap_shot_info = rospy.Publisher('fleye/snap_shot_info', Float32MultiArray, queue_size=1)
+
+
         # modules
         self.__cmd = cmd_manager.CMD_MANAGER()
         self.__imu = imu_manager.IMU_MANAGER()
@@ -58,6 +84,7 @@ class BEBOP_GCS(object):
         self.__user = user_intent_manager.USER_INTENT_MANAGER()
         self.__target_manager = target.TARGET_MANAGER()
         self.__controller = controller.CONTROLLER()
+        self.__image_roller = image_roller.IMAGE_ROLLER()
         self.__planner = planner.PLANNER()
         # self.tld = tld_module.TLD_MODULE()
 
@@ -96,40 +123,46 @@ class BEBOP_GCS(object):
             self.__is_overtaken = True
             self.__planner.set_hover_position(None)
         elif data.buttons[16] is 1:
+            if self.__t_0 is not None:
+                tcw, Rcw = two_compose(self.__t_0, self.__q_1, self.__q_2, self.__p_1, self.__p_2, self.__epsilon_1, self.__epsilon_2)
+                position = tcw.T.tolist()[0]
+                orientation = transformations.euler_from_matrix(Rcw, axes='ryxz')
+                self.__planner.plan_restore(position, orientation, dict())
+                self.__stage = STAGE.stage_restore
             self.__is_overtaken = False
 
     def overtake_callback(self, data):
         self.__is_overtaken = data.data
 
     def pub_interface_look(self):
-        if self.__stage is STAGE.stage_idle:
-            self.pub_pano.publish("white")
-            self.pub_orbit.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
-            # self.pub_zigzag.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
-            self.pub_zigzag.publish("white")
-            # self.pub_pano.publish("grey")
-            # self.pub_orbit.publish("grey")
-            # self.pub_zigzag.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
-        elif self.__stage is STAGE.stage_pano:
-            self.pub_pano.publish("yellow")
-            self.pub_orbit.publish("grey")
-            self.pub_zigzag.publish("grey")
-        elif self.__stage is STAGE.stage_orbit:
-            self.pub_pano.publish("grey")
-            self.pub_orbit.publish("yellow")
-            self.pub_zigzag.publish("grey")
-        elif self.__stage is STAGE.stage_zigzag:
-            self.pub_pano.publish("grey")
-            self.pub_orbit.publish("grey")
-            self.pub_zigzag.publish("yellow")
-        elif self.__stage is STAGE.stage_restore:
-            self.pub_pano.publish("grey")
-            self.pub_orbit.publish("grey")
-            self.pub_zigzag.publish("grey")
-        else:
-            self.pub_pano.publish("grey")
-            self.pub_orbit.publish("grey")
-            self.pub_zigzag.publish("grey")
+        # if self.__stage is STAGE.stage_idle:
+        #     self.pub_pano.publish("white")
+        #     self.pub_orbit.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
+        #     # self.pub_zigzag.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
+        #     self.pub_zigzag.publish("white")
+        #     # self.pub_pano.publish("grey")
+        #     # self.pub_orbit.publish("grey")
+        #     # self.pub_zigzag.publish("white" if len(self.__user.get_composed_targets()) is 1 else "grey")
+        # elif self.__stage is STAGE.stage_pano:
+        #     self.pub_pano.publish("yellow")
+        #     self.pub_orbit.publish("grey")
+        #     self.pub_zigzag.publish("grey")
+        # elif self.__stage is STAGE.stage_orbit:
+        #     self.pub_pano.publish("grey")
+        #     self.pub_orbit.publish("yellow")
+        #     self.pub_zigzag.publish("grey")
+        # elif self.__stage is STAGE.stage_zigzag:
+        #     self.pub_pano.publish("grey")
+        #     self.pub_orbit.publish("grey")
+        #     self.pub_zigzag.publish("yellow")
+        # elif self.__stage is STAGE.stage_restore:
+        #     self.pub_pano.publish("grey")
+        #     self.pub_orbit.publish("grey")
+        #     self.pub_zigzag.publish("grey")
+        # else:
+        self.pub_pano.publish("grey")
+        self.pub_orbit.publish("grey")
+        self.pub_zigzag.publish("grey")
 
     def safe_main_routine(self, event):
         try:
@@ -302,39 +335,59 @@ class BEBOP_GCS(object):
             self.__cmd.send_cmd_vel(self.__controller.get_control_forward(), self.__controller.get_control_left(), self.__controller.get_control_up(), self.__controller.get_control_turn_left())
             pan, tilt = self.__cmd.set_tilt_pan(self.__controller.get_control_goal_tilt(), self.__controller.get_control_goal_pan())
             self.__imu.set_tilt_pan(tilt, pan)
-
+        # -----------------------------
+        # nothing but this is important here
+        # -----------------------------
         elif self.__stage is STAGE.stage_restore:
             # CONTROLLER: set current state
             tilt, pan = self.__imu.get_tilt_pan()
+            # print  'check 1'
             self.__controller.set_current_state(self.__orb.get_position(),
                                                 self.__orb.get_orientation(),
                                                 self.__orb.get_velocity(),
                                                 self.__target_manager.get_all_compositions(),
                                                 pan, tilt)
+            self.__image_roller.set_orb_roll(self.__orb.get_orientation()[2])
+            self.__image_roller.set_target_compositions(self.__p_1,self.__p_2)
+            self.__image_roller.set_target_position(self.__planner.get_restore_position())
+            self.__image_roller.set_current_position(self.__orb.get_position())
+            # print  'check 2'
 
             # PLANNER: check restore stage
-            if self.__planner.is_restore_done(self.__orb.get_position(),
-                                              self.__orb.get_orientation(),
-                                              self.__target_manager.get_target_compositions(self.__planner.get_restore_compositions().keys())):
-                self.__user.reset_intention([self.__planner.get_restore_orientation()[0], self.__planner.get_restore_orientation()[1]]) # a hacky way to handle orientation after restore
-                self.__planner.reset_restore()
-                self.__stage = STAGE.stage_idle
-                print "MAIN: restore done"
-                return
+            # if self.__planner.is_restore_done(self.__orb.get_position(),
+            #                                   self.__orb.get_orientation(),
+            #                                   self.__target_manager.get_target_compositions(self.__planner.get_restore_compositions().keys())):
+            #     self.__user.reset_intention([self.__planner.get_restore_orientation()[0], self.__planner.get_restore_orientation()[1]]) # a hacky way to handle orientation after restore
+            #     self.__planner.reset_restore()
+            #     self.__stage = STAGE.stage_idle
+            #     print "MAIN: restore done"
+            #     return
 
             # CONTROLLER: set target state
+            mat_rot = rotation_to_minize_reprojection_error(np.array([[self.__orb.get_position()[0]],[self.__orb.get_position()[1]],[self.__orb.get_position()[2]]]),
+                                                                    self.__q_1, self.__q_2, self.__p_1, self.__p_2)
+            orientation = transformations.euler_from_matrix(mat_rot, axes='ryxz')
             self.__controller.set_target_state(self.__planner.get_restore_position(),
                                                [0,0,0],
-                                               self.__planner.get_restore_compositions(),
-                                               self.__planner.get_restore_orientation())
+                                               dict(), #self.__planner.get_restore_compositions(),
+                                               orientation) #self.__planner.get_restore_orientation())
+            self.__image_roller.set_target_orientation(orientation)
+            self.__image_roller.set_current_orientation(self.__orb.get_orientation())
+            self.__image_roller.set_target_roll(orientation[2])#self.__planner.get_restore_orientation()[2])
+            # print  'check 3'
+            #print self.__planner.get_restore_position()
 
             # compute
             self.__controller.compute_control()
+            self.__image_roller.compute_control()
+            # print  'check 4'
 
             # control
             self.__cmd.send_cmd_vel(self.__controller.get_control_forward(), self.__controller.get_control_left(), self.__controller.get_control_up(), self.__controller.get_control_turn_left())
             pan, tilt = self.__cmd.set_tilt_pan(self.__controller.get_control_goal_tilt(), self.__controller.get_control_goal_pan())
             self.__imu.set_tilt_pan(tilt, pan)
+
+            # print  'check 5'
 
         elif self.__stage is STAGE.stage_pano:
             # CONTROLLER: set current state
@@ -407,6 +460,7 @@ class BEBOP_GCS(object):
             self.__cmd.send_cmd_vel(self.__controller.get_control_forward(), self.__controller.get_control_left(), self.__controller.get_control_up(), self.__controller.get_control_turn_left())
             pan, tilt = self.__cmd.set_tilt_pan(self.__controller.get_control_goal_tilt(), self.__controller.get_control_goal_pan())
             self.__imu.set_tilt_pan(tilt, pan)
+            self.__imu.set_tilt_pan(tilt, pan)
 
         elif self.__stage is STAGE.stage_zigzag:
             # CONTROLLER: set current state
@@ -448,6 +502,50 @@ class BEBOP_GCS(object):
         self.__image_compressed_buffer_lock.acquire()
         self.__image_compressed_buffer = data
         self.__image_compressed_buffer_lock.release()
+
+    def image_callback(self,data):
+        self.__image_buffer_lock.acquire()
+        self.__image_buffer = data
+        # try:
+        #     cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
+        # except CvBridgeError as e:
+        #     print(e)
+        #
+        # (rows,cols,channels) = cv_image.shape
+        # mat_roll = cv2.getRotationMatrix2D((cols/2,rows/2),-45,1)
+        # dst = cv2.warpAffine(cv_image,mat_roll,(cols,rows))
+        #
+        # try:
+        #     self.__pub_rolled_image.publish(self.bridge.cv2_to_imgmsg(dst, "bgr8"))
+        # except CvBridgeError as e:
+        #     print(e)
+        self.__image_buffer_lock.release()
+        # hacky way to publish targets
+        # targets in the form of PointCloud
+
+
+        if self.__q_1 is None or self.__q_2 is None:
+            return
+
+        targetsMsg = PointCloud()
+
+        channel_radius = ChannelFloat32()
+
+        channel_radius.name = "radius"
+
+        targetsMsg.header = self.__last_header
+        targetsMsg.header.frame_id = FRAME_ID_WORLD
+
+        targetsMsg.points.append(Point32(self.__q_1[0], self.__q_1[1], self.__q_1[2]))
+        targetsMsg.points.append(Point32(self.__q_2[0], self.__q_2[1], self.__q_2[2]))
+        channel_radius.values.append(self.__epsilon_1)
+        channel_radius.values.append(self.__epsilon_2)
+
+        targetsMsg.channels.append(channel_radius)
+
+        self.__pub_targets.publish(targetsMsg)
+
+
 
     # def reset_tracker(self, id):
         # if main_target is unselected, it is up to the user to choose the next main target
@@ -529,6 +627,19 @@ class BEBOP_GCS(object):
 
         self.__pub_snap_shot_info.publish(pose_composition_msg)
         print "MAIN: shoot"
+
+    def compose_callback(self, data):
+        if len(data.data) is not 15:
+            print 'The length of the input array should be 15'
+            return
+        self.__q_1 = np.array([[data.data[0]], [data.data[1]], [data.data[2]]])          # [x,y,z]
+        self.__q_2 = np.array([[data.data[3]], [data.data[4]], [data.data[5]]])          # [x,y,z]
+        self.__epsilon_1 = data.data[6]          # float32
+        self.__epsilon_2 = data.data[7]          # float32
+        self.__t_0 = np.array([[data.data[8]], [data.data[9]], [data.data[10]]])          # [x,y,z]
+        self.__p_1 = np.array([[data.data[11]], [data.data[12]], [1]])          # [u,v,1]
+        self.__p_2 = np.array([[data.data[13]], [data.data[14]], [1]])          # [u,v,1]
+
 
     def safe_gesture_callback(self, data):
         try:
@@ -943,5 +1054,15 @@ class BEBOP_GCS(object):
 
 
 if __name__ == '__main__':
+    # t0w = np.array([[10],[0],[0]])
+    # q1w = np.array([[2],[1],[0]])
+    # q2w = np.array([[1],[2],[3]])
+    # p1i = np.array([[100],[100],[1]])
+    # p2i = np.array([[200],[200],[1]])
+    # epsilon1 = 0.2
+    # epsilon2 = 0.3
+    # tt, RR = two_compose(t0w,q1w,q2w,p1i, p2i,epsilon1, epsilon2)
+    #
+    # print tt, RR
     gcs = BEBOP_GCS()
     rospy.spin()

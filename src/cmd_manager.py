@@ -7,7 +7,7 @@ import math
 # Import the messages we're interested in sending and receiving
 from geometry_msgs.msg import Twist  	 # for sending commands to the drone
 from std_msgs.msg import Empty       	 # for land/takeoff/emergency
-# from sensor_msgs.msg import CompressedImage        # for receiving the video feed
+#from sensor_msgs.msg import CompressedImage        # for receiving the video feed
 # from ardrone_autonomy.msg import Navdata # for receiving navdata feedback
 
 # An enumeration of Drone Statuses
@@ -68,7 +68,7 @@ class CMD_MANAGER(object):
         cmd_vel.angular.z = -turn_left
         self.__pubCmdVel.publish(cmd_vel)
 
-    # cf. http://bebop-autonomy.readthedocs.io/en/latest/piloting.html#moving-the-virtual-camera
+    # reference. http://bebop-autonomy.readthedocs.io/en/latest/piloting.html#moving-the-virtual-camera
     # angular.y (+)      tilt down  -> tilt up
     #           (-)      tilt up    -> tilt down
     # angular.z (+)      pan left   -> pan right
@@ -76,8 +76,8 @@ class CMD_MANAGER(object):
     def set_tilt_pan(self, tilt=0, pan=0): # pan: [-35 * math.pi / 180., 35 * math.pi / 180.], tilt: [-35 * math.pi / 180., 35 * math.pi / 180.]
         if tilt < -35. * math.pi / 180.:
             tilt = -35. * math.pi / 180.
-        if tilt > 35. * math.pi / 180. :
-            tilt = 35. * math.pi / 180.
+        if tilt > 30. * math.pi / 180. :
+            tilt = 30. * math.pi / 180.
         if pan < -20. * math.pi / 180.:
             pan = -20. * math.pi / 180.
         if pan > 20. * math.pi / 180.:
@@ -89,3 +89,4 @@ class CMD_MANAGER(object):
         self.__pubCameraControl.publish(camera_control)
 
         return pan, tilt
+

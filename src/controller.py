@@ -27,12 +27,14 @@ class CONTROLLER(object):
         self.__current_compositions = dict()    # format: dict { target_id: (u, v) }
         self.__current_pan = None               # format: in radians
         self.__current_tilt = None              # format: in radians
+        self.__current_roll = None
 
         self.__target_image_position = None                 # format: x, y, z
         self.__target_image_translation_velocity = None     # format: vx, vy, vz
         self.__target_compositions = dict()                 # format: dict { target_id: (u, v) }, value = None is filtered out before passing in
         self.__target_pan_world = None              # useful only when __target_compositions is empty, in radians
         self.__target_tilt_world = None             # useful only when __target_compositions is empty, in radians
+        self.__target_roll_world = None
 
         self.__control_forward = None
         self.__control_left = None
@@ -81,7 +83,7 @@ class CONTROLLER(object):
         self.__pub_reflexxes_az = rospy.Publisher('fleye/debug/reflexxes_az', Float32, queue_size=1)
 
 
-    def set_current_state(self, image_position, image_orientation, image_translation_velocity, compositions, pan, tilt):
+    def set_current_state(self, image_position, image_orientation, image_translation_velocity, compositions, pan, tilt, roll=0):
         self.__current_image_position = image_position
         self.__current_image_orientation = image_orientation # pan->tilt->roll
         self.__current_image_translation_velocity = image_translation_velocity
@@ -89,6 +91,7 @@ class CONTROLLER(object):
         self.__current_compositions = compositions
         self.__current_pan = pan
         self.__current_tilt = tilt
+        self.__current_roll = roll
 
     def set_target_state(self, image_position, image_translation_velocity, compositions, rotation_world):
         self.__target_image_position = image_position
@@ -96,6 +99,7 @@ class CONTROLLER(object):
         self.__target_compositions = compositions
         self.__target_pan_world = rotation_world[0]
         self.__target_tilt_world = rotation_world[1]
+        self.__target_roll_world = rotation_world[2]
 
     def compute_control(self):
         self.__pub_current_state_and_target_state()
@@ -160,10 +164,10 @@ class CONTROLLER(object):
             try:
                 error_pan = angle.rad_from_to(self.__current_image_orientation[0], self.__target_pan_world)
                 error_tilt = angle.rad_from_to(self.__current_image_orientation[1], self.__target_tilt_world)
-                if abs(error_pan) < ERROR_TOLERANCE_Control_pan:
-                    error_pan = 0
-                if abs(error_tilt) < ERROR_TOLERANCE_Control_tilt:
-                    error_tilt = 0
+                # if abs(error_pan) < ERROR_TOLERANCE_Control_pan:
+                #     error_pan = 0
+                # if abs(error_tilt) < ERROR_TOLERANCE_Control_tilt:
+                #     error_tilt = 0
                 reflexxes_response = self.__srv_reflexxes_control(self.__get_reflexxes_orientation_control_request(self.__current_pan + error_pan, self.__current_tilt + error_tilt))
 
                 # control = np.array([[reflexxes_response.x, reflexxes_response.y, reflexxes_response.vz]]).T
@@ -172,8 +176,14 @@ class CONTROLLER(object):
                 self.__control_pan_acceleration = reflexxes_response.ax
                 self.__control_tilt_acceleration = reflexxes_response.ay
 
-                self.__control_goal_pan = reflexxes_response.x
-                self.__control_goal_tilt = reflexxes_response.y
+                self.__control_goal_pan = self.__current_pan + 0.3 * math.pi / 180. if reflexxes_response.x > self.__current_pan else  self.__current_pan -0.3 * math.pi / 180. #??????????????????
+                self.__control_goal_tilt = self.__current_tilt + 0.3 * math.pi / 180. if reflexxes_response.y > self.__current_tilt else self.__current_tilt-0.3* math.pi / 180.
+                if abs(reflexxes_response.x - self.__current_pan)  < 0.3 * math.pi / 180.:
+                    self.__control_goal_pan = self.__current_pan
+                if abs(reflexxes_response.y - self.__current_tilt)  < 0.3 * math.pi / 180.:
+                    self.__control_goal_tilt = self.__current_tilt
+                # self.__control_goal_pan = reflexxes_response.x
+                # self.__control_goal_tilt = reflexxes_response.y
                 self.__control_turn_left = - reflexxes_response.vz
 
                 # self.__pub_virtualcamera_pan.publish(self.__current_pan)
@@ -215,6 +225,10 @@ class CONTROLLER(object):
 
         except rospy.ServiceException, e:
             print "CONTROLLER: ReflexxesControl Service call failed: %s"%e
+
+    def __get__orientation_control_to_minize_reprojection_error(self):
+        # todo
+        pass
 
     def __get_reflexxes_orientation_control_request(self, goal_pan, goal_tilt):
         request = ReflexxesControlRequest()
@@ -329,8 +343,8 @@ class CONTROLLER(object):
                 target_pose.header.frame_id = FRAME_ID_WORLD
                 target_pose.pose.position = Point(self.__target_image_position[0], self.__target_image_position[1], self.__target_image_position[2])
 
-                q = transformations.quaternion_from_euler(self.__target_pan_world - math.pi / 2, -self.__target_tilt_world, 0, axes='ryzx') # note the axis is 'ryzx'
-
+                # q = transformations.quaternion_from_euler(self.__target_pan_world - math.pi / 2, -self.__target_tilt_world, 0, axes='ryzx') # note the axis is 'ryzx'
+                q = transformations.quaternion_from_euler(self.__target_pan_world, self.__target_tilt_world, self.__target_roll_world, axes='ryzx') # note the axis is 'ryzx'
                 target_pose.pose.orientation = Quaternion(q[0], q[1], q[2], q[3])
 
                 self.__pub_target_pose.publish(target_pose)
