@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import roslib
+import roslib; roslib.load_manifest('upsample')
 # roslib.load_manifest('fleye_controller')
 import rospy
 
@@ -14,8 +14,11 @@ import math
 import numpy as np
 
 from fleye_controller.srv import ReflexxesControl, ReflexxesControlRequest
+from upsample.srv import CollisionAvoidance, CollisionAvoidanceRequest
 
 from std_msgs.msg import Float32
+
+import time
 
 # SET -> COMPUTE -> GET
 class CONTROLLER(object):
@@ -49,6 +52,7 @@ class CONTROLLER(object):
         self.__control_tilt_acceleration = 0
 
         self.__srv_reflexxes_control = rospy.ServiceProxy('fleye/reflexxes_control', ReflexxesControl)
+        self.__srv_collision_avoidance = rospy.ServiceProxy('us/collision_avoidance', CollisionAvoidance)
 
         # debug
         self.__pub_target_position = rospy.Publisher('fleye/debug/controller_target_position', PointStamped, queue_size=1)
@@ -197,24 +201,33 @@ class CONTROLLER(object):
     def __compute_position_control(self):
         # rospy.wait_for_service('fleye/reflexxes_control')
         try:
-            reflexxes_response = self.__srv_reflexxes_control(self.__get_reflexxes_position_control_request())
-
-            control_world = np.array([[reflexxes_response.vx, reflexxes_response.vy, reflexxes_response.vz]]).T
-
-            # rotate control from world to drone, i.e., rotate around downward y-axis
-            drone_yaw = self.__current_image_orientation[0] - self.__current_pan   # virtual camera offset
-            # print "CONTROLLER: image_yaw", self.__current_image_orientation[0], "virtual camera pan", self.__current_pan, "drone_yaw", drone_yaw
-            rotation_from_world_to_drone = transformations.rotation_matrix(-drone_yaw, [0,1,0])[:3,:3]
-            control_drone = np.dot(rotation_from_world_to_drone, control_world)
-
-            self.__control_left = - control_drone[0,0] * GAIN_R_left
-            self.__control_up = - control_drone[1,0] * GAIN_R_up
-            self.__control_forward = control_drone[2,0] * GAIN_R_forward
-
-            self.__pub_reflexxes_response(reflexxes_response)
-
-        except rospy.ServiceException, e:
-            print "CONTROLLER: ReflexxesControl Service call failed: %s"%e
+            # start = time.time()
+            collision_avoidance_response = self.__srv_collision_avoidance(self.__get_collision_avoidance_request())
+            self.__target_image_position = [collision_avoidance_response.i_position.x, collision_avoidance_response.i_position.y, collision_avoidance_response.i_position.z]
+            # end = time.time()
+            # print(end - start)
+        except rospy.ServiceException, e1:
+            print "CONTROLLER: CollisionAvoidance Service call failed: %s"%e1    
+        finally:
+            try:
+                reflexxes_response = self.__srv_reflexxes_control(self.__get_reflexxes_position_control_request())
+    
+                control_world = np.array([[reflexxes_response.vx, reflexxes_response.vy, reflexxes_response.vz]]).T
+    
+                # rotate control from world to drone, i.e., rotate around downward y-axis
+                drone_yaw = self.__current_image_orientation[0] - self.__current_pan   # virtual camera offset
+                # print "CONTROLLER: image_yaw", self.__current_image_orientation[0], "virtual camera pan", self.__current_pan, "drone_yaw", drone_yaw
+                rotation_from_world_to_drone = transformations.rotation_matrix(-drone_yaw, [0,1,0])[:3,:3]
+                control_drone = np.dot(rotation_from_world_to_drone, control_world)
+    
+                self.__control_left = - control_drone[0,0] * GAIN_R_left
+                self.__control_up = - control_drone[1,0] * GAIN_R_up
+                self.__control_forward = control_drone[2,0] * GAIN_R_forward
+    
+                self.__pub_reflexxes_response(reflexxes_response)
+    
+            except rospy.ServiceException, e2:
+                print "CONTROLLER: ReflexxesControl Service call failed: %s"%e2
 
     def __get_reflexxes_orientation_control_request(self, goal_pan, goal_tilt):
         request = ReflexxesControlRequest()
@@ -286,6 +299,21 @@ class CONTROLLER(object):
         request.t_vx = self.__target_image_translation_velocity[0]
         request.t_vy = self.__target_image_translation_velocity[1]
         request.t_vz = self.__target_image_translation_velocity[2]
+
+        return request
+
+    def __get_collision_avoidance_request(self):
+        request = CollisionAvoidanceRequest()
+
+        request.c_position = Point()
+        request.c_position.x = self.__current_image_position[0]
+        request.c_position.y = self.__current_image_position[1]
+        request.c_position.z = self.__current_image_position[2]
+
+        request.t_position = Point()
+        request.t_position.x = self.__target_image_position[0]
+        request.t_position.y = self.__target_image_position[1]
+        request.t_position.z = self.__target_image_position[2]
 
         return request
 
