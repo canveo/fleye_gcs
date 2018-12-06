@@ -522,7 +522,7 @@ class BEBOP_GCS(object):
             # takeoff
             if int(data.data[0]) is ord('t'):
                 flight_state = self.__imu.get_flight_state()
-                if int(flight_state) == imu_manager.FLIGHT_STATE.state_landed or int(flight_state) == imu_manager.FLIGHT_STATE.state_emergency:
+                if True: #int(flight_state) == imu_manager.FLIGHT_STATE.state_landed or int(flight_state) == imu_manager.FLIGHT_STATE.state_emergency:
                     self.__cmd.send_takeoff()
                     self.pub_tl.publish("land")
                     self.reset_all()
@@ -532,7 +532,7 @@ class BEBOP_GCS(object):
             # land
             elif int(data.data[0]) is ord('l'):
                 flight_state = self.__imu.get_flight_state()
-                if int(flight_state) == imu_manager.FLIGHT_STATE.state_flying or int(flight_state) == imu_manager.FLIGHT_STATE.state_hovering:
+                if True: #int(flight_state) == imu_manager.FLIGHT_STATE.state_flying or int(flight_state) == imu_manager.FLIGHT_STATE.state_hovering:
                     self.__cmd.send_land()
                     self.pub_tl.publish("takeoff")
                     self.reset_all()
